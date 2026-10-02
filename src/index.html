@@ -8,37 +8,73 @@
 <body>
   <header>
     <h1>孤山掠影</h1>
+    <nav id="tabs">
+      <button class="tab active" data-view="planner">行程规划</button>
+      <button class="tab" data-view="library">路线库</button>
+    </nav>
     <span id="config-hint"></span>
   </header>
-  <main>
-    <aside id="panel-left">
-      <label>区域
-        <select id="region"></select>
-      </label>
-      <label>出发车站
-        <input id="origin" list="station-list" placeholder="如 西安北" value="成都东">
-        <datalist id="station-list"></datalist>
-      </label>
-      <label>出发日期
-        <input id="start-date" type="date">
-      </label>
-      <label>总天数
-        <input id="days" type="number" min="3" max="20" value="7">
-      </label>
-      <label>徒步线路(可选,留空自动选)
-        <select id="trail"><option value="">自动挑选</option></select>
-      </label>
-      <button id="generate">生成行程</button>
-      <div id="left-msg"></div>
-    </aside>
-    <section id="panel-map">
-      <div id="map"></div>
-      <div id="weather-strip"></div>
-    </section>
-    <aside id="panel-right">
-      <div id="result"><p class="muted">生成后这里显示逐日行程与预算</p></div>
-    </aside>
-  </main>
+  <div id="view-planner">
+    <main>
+      <aside id="panel-left">
+        <label>区域
+          <select id="region"></select>
+        </label>
+        <label>出发车站
+          <input id="origin" list="station-list" placeholder="如 西安北" value="成都东">
+          <datalist id="station-list"></datalist>
+        </label>
+        <label>出发日期
+          <input id="start-date" type="date">
+        </label>
+        <label>总天数
+          <input id="days" type="number" min="3" max="20" value="7">
+        </label>
+        <label>徒步线路(可选,留空自动选)
+          <select id="trail"><option value="">自动挑选</option></select>
+        </label>
+        <button id="generate">生成行程</button>
+        <div id="left-msg"></div>
+      </aside>
+      <section id="panel-map">
+        <div id="map"></div>
+        <div id="weather-strip"></div>
+      </section>
+      <aside id="panel-right">
+        <div id="result"><p class="muted">生成后这里显示逐日行程与预算</p></div>
+      </aside>
+    </main>
+  </div>
+  <div id="view-library" hidden>
+    <div id="lib-filters">
+      <input id="lib-search" placeholder="搜索名称 / 地区 / 简介">
+      <select id="lib-province"><option value="">全部省份</option></select>
+      <select id="lib-grade">
+        <option value="">全部难度</option>
+        <option value="5">★5 极限</option>
+        <option value="4">★4 高难</option>
+        <option value="3">★3 进阶</option>
+        <option value="2">★2 入门</option>
+        <option value="1">★1 休闲</option>
+      </select>
+      <select id="lib-type"><option value="">全部类型</option></select>
+      <select id="lib-status">
+        <option value="">全部状态</option>
+        <option value="开放">开放</option>
+        <option value="部分管控">部分管控</option>
+        <option value="管控">管控</option>
+        <option value="禁入/关闭">禁入/关闭</option>
+      </select>
+      <select id="lib-sort">
+        <option value="grade">按难度排序</option>
+        <option value="climb">按累计爬升</option>
+        <option value="days">按天数</option>
+        <option value="name">按名称</option>
+      </select>
+    </div>
+    <div id="lib-count" class="muted"></div>
+    <div id="lib-list"></div>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>

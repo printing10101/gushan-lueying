@@ -33,3 +33,30 @@ button:hover { background: #175a40; }
 details { font-size: 12px; margin-top: 6px; }
 summary { cursor: pointer; color: #2471a3; }
 input#origin { font-weight: normal; }
+
+/* ---------- 标签页与视图切换 ---------- */
+#tabs { display: flex; gap: 6px; }
+#tabs .tab { width: auto; padding: 4px 14px; font-size: 13px; background: #34495e; }
+#tabs .tab.active { background: #1e6f50; }
+#view-planner { flex: 1; min-height: 0; display: flex; }
+#view-library { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px 12px; gap: 8px; }
+#view-planner[hidden], #view-library[hidden] { display: none; } /* 覆盖 display:flex,否则 hidden 失效 */
+#lib-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+#lib-filters input, #lib-filters select { padding: 6px; border: 1px solid #c4ccc8; border-radius: 4px; font-size: 13px; }
+#lib-search { flex: 1 1 220px; }
+#lib-list { flex: 1; overflow-y: auto; padding-right: 4px; }
+
+/* ---------- 路线卡片 ---------- */
+.route { border: 1px solid #dde3e0; border-radius: 6px; margin-bottom: 8px; background: #fff; }
+.route summary { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; flex-wrap: wrap; }
+.route summary::marker { color: #2471a3; }
+.route-title { font-weight: bold; font-size: 14px; }
+.route-sub { font-size: 12px; flex: 1 1 100%; order: 3; }
+.route-body { padding: 4px 10px 10px; font-size: 13px; }
+.route-body p { margin: 6px 0; }
+.route-metrics { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.route-metrics span { background: #eef2f0; border-radius: 3px; padding: 2px 6px; font-size: 12px; }
+.grade { font-size: 12px; font-weight: bold; padding: 1px 8px; border-radius: 10px; color: #fff; margin-left: auto; white-space: nowrap; }
+.g1 { background: #7f8c8d; } .g2 { background: #27ae60; } .g3 { background: #2471a3; } .g4 { background: #d68910; } .g5 { background: #b03a2e; }
+.status { font-size: 11px; padding: 1px 6px; border-radius: 3px; color: #fff; white-space: nowrap; }
+.st-open { background: #1e8449; } .st-warn { background: #d68910; } .st-bad { background: #b03a2e; }

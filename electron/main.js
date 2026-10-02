@@ -7,6 +7,7 @@ const rail = require('../lib/rail12306');
 const amap = require('../lib/amap');
 const weather = require('../lib/weather');
 const planner = require('../lib/planner');
+const grading = require('../lib/grading');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -27,9 +28,18 @@ app.whenReady().then(() => {
 });
 app.on('window-all-closed', () => app.quit());
 
+// 线路库附上评级明细(_grade = 派生字段,勿手改),渲染进程拿去展示与筛选
+function readData(name) {
+  const data = store.read(name);
+  if (name === 'trails' && data) {
+    for (const trail of Object.values(data)) trail._grade = grading.computeBreakdown(trail);
+  }
+  return data;
+}
+
 const wrap = (fn) => async (_event, payload) => fn(payload);
 
-ipcMain.handle('data:read', wrap((name) => store.read(name)));
+ipcMain.handle('data:read', wrap(readData));
 ipcMain.handle('data:write', wrap(({ name, content }) => store.write(name, content)));
 ipcMain.handle('trip:generate', wrap((input) => planner.generate(input)));
 ipcMain.handle('rail:query', wrap(({ fromStation, toStation, date }) =>
