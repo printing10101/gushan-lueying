@@ -243,10 +243,24 @@ function renderLibrary() {
     days: (a, b) => b.days - a.days || b.distanceKm - a.distanceKm,
     name: (a, b) => a.name.localeCompare(b.name, 'zh'),
   };
-  list.sort(sorters[$('lib-sort').value]);
+
+  // 按省份分组;组序沿用数据文件的地域编排(新疆→西藏→川渝滇…→港澳台),组内再排序
+  const provinceOrder = new Map();
+  for (const t of libTrails) if (!provinceOrder.has(t.province)) provinceOrder.set(t.province, provinceOrder.size);
+  const groups = new Map();
+  for (const t of list) {
+    if (!groups.has(t.province)) groups.set(t.province, []);
+    groups.get(t.province).push(t);
+  }
+  const sections = [...groups.entries()]
+    .sort((a, b) => provinceOrder.get(a[0]) - provinceOrder.get(b[0]))
+    .map(([prov, routes]) =>
+      `<h2 class="prov-head">${prov}<span>${routes.length} 条</span></h2>`
+      + routes.sort(sorters[$('lib-sort').value]).map(routeHtml).join(''))
+    .join('');
 
   $('lib-count').textContent = `共 ${libTrails.length} 条 · 显示 ${list.length} 条`;
-  $('lib-list').innerHTML = list.map(routeHtml).join('')
+  $('lib-list').innerHTML = sections
     || '<p class="muted" style="padding:12px">没有匹配的线路,换个条件试试</p>';
 }
 

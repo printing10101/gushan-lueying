@@ -12,6 +12,8 @@ const STATUSES = ['开放', '部分管控', '管控', '禁入', '关闭'];
 
 test('路线库规模:全国覆盖不应缩水', () => {
   assert.ok(Object.keys(trails).length >= 100, `现有 ${Object.keys(trails).length} 条,应不少于 100 条`);
+  const provinces = new Set(Object.values(trails).map((t) => t.province));
+  assert.ok(provinces.size >= 25, `现有 ${provinces.size} 个省级区域,应不少于 25 个`);
 });
 
 test('全量校验:必填字段 / 词汇表 / 坐标 / 评级与指标建议相差不超一级', () => {

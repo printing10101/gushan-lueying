@@ -45,6 +45,8 @@ input#origin { font-weight: normal; }
 #lib-filters input, #lib-filters select { padding: 6px; border: 1px solid #c4ccc8; border-radius: 4px; font-size: 13px; }
 #lib-search { flex: 1 1 220px; }
 #lib-list { flex: 1; overflow-y: auto; padding-right: 4px; }
+.prov-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 15px; margin: 14px 0 8px; padding: 6px 10px; background: #1e3a2f; color: #fff; border-radius: 4px; position: sticky; top: 0; }
+.prov-head span { font-size: 12px; font-weight: normal; color: #f0c674; }
 
 /* ---------- 路线卡片 ---------- */
 .route { border: 1px solid #dde3e0; border-radius: 6px; margin-bottom: 8px; background: #fff; }
