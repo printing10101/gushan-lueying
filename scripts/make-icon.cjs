@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const SIZE = 64;
+const SIZE = 256; // electron-builder 要求 ICO 内至少 256x256
 
 // 简单几何画布
 const pixels = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => [0, 0, 0, 0]));
@@ -25,10 +25,11 @@ function fillTriangle(p1, p2, p3, color) {
   }
 }
 
-fillCircle(32, 32, 30, [30, 58, 47]);          // 深绿圆底
-fillCircle(44, 18, 6, [240, 198, 116]);        // 太阳
-fillTriangle([14, 48], [30, 18], [46, 48], [235, 235, 230]); // 主峰
-fillTriangle([34, 48], [46, 28], [56, 48], [180, 186, 182]); // 次峰
+const S = SIZE / 64; // 设计稿按 64 画,等比放大
+fillCircle(32 * S, 32 * S, 30 * S, [30, 58, 47]);          // 深绿圆底
+fillCircle(44 * S, 18 * S, 6 * S, [240, 198, 116]);        // 太阳
+fillTriangle([14 * S, 48 * S], [30 * S, 18 * S], [46 * S, 48 * S], [235, 235, 230]); // 主峰
+fillTriangle([34 * S, 48 * S], [46 * S, 28 * S], [56 * S, 48 * S], [180, 186, 182]); // 次峰
 
 // 编码 PNG
 function chunk(type, data) {
@@ -72,9 +73,14 @@ const png = Buffer.concat([
 
 // 包装成 ICO(单条 PNG 入口,Vista+ 支持)
 const entry = Buffer.alloc(16);
-entry[0] = SIZE; entry[2] = 1; entry[4] = 1; entry[6] = 32;
+entry[0] = SIZE === 256 ? 0 : SIZE; // ICO 规范:256 用 0 表示
+entry[2] = 1; entry[4] = 1; entry[6] = 32;
 entry.writeUInt32LE(png.length, 8); entry.writeUInt32LE(22, 12);
-const header = Buffer.alloc(6); header.writeUInt16LE(1, 0); header.writeUInt16LE(1, 2);
+// ICONDIR:保留位 0、类型 1(图标)、条目数 1
+const header = Buffer.alloc(6);
+header.writeUInt16LE(0, 0);
+header.writeUInt16LE(1, 2);
+header.writeUInt16LE(1, 4);
 
 const out = path.join(__dirname, '..', 'build', 'icon.ico');
 fs.mkdirSync(path.dirname(out), { recursive: true });
