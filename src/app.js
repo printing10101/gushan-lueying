@@ -142,7 +142,6 @@ function railHtml(leg, label) {
   const seats = Object.entries(leg.chosen.seats).map(([k, v]) => `${k}${v}`).join(' / ') || '余票未显示';
   return `<p><b>${label}</b> ${leg.chosen.code} ${leg.chosen.startTime}→${leg.chosen.arriveTime}(历时${leg.chosen.lishi}) ${price}</p>
     <p class="muted">${leg.fromStation}→${leg.toStation} ${leg.date} | ${seats}</p>
-    ${leg.priceError ? `<p class="warn">票价查询失败: ${leg.priceError}</p>` : ''}
     <details><summary>原始数据(核对用)</summary><pre style="font-size:11px">${JSON.stringify(leg.evidence, null, 1)}</pre></details>`;
 }
 

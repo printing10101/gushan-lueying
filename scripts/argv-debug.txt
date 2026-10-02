@@ -1,1 +1,0 @@
-["E:\\孤山掠影\\node_modules\\electron\\dist\\electron.exe",".","--no-sandbox","--smoke=rail"]

@@ -14,6 +14,24 @@ test('parseStationJs:提取站名与电报码', () => {
   ]);
 });
 
+test('parsePrices:解码余票行内嵌票价(f39)', () => {
+  // 实证样例:G4184 成都东→西安北,商务774 一等405 二等252
+  const prices = rail.parsePrices('9077400001M040500000O025200000O025203000');
+  assert.deepEqual(prices, { 商务座: 774, 一等座: 405, 二等座: 252 });
+});
+
+test('parsePrices:普速车硬座硬卧软卧', () => {
+  const prices = rail.parsePrices('3022250021403485000710128500211012853198');
+  assert.deepEqual(prices, { 硬卧: 222, 软卧: 348, 硬座: 128 });
+});
+
+test('parsePrices:空字段与未知代码', () => {
+  assert.deepEqual(rail.parsePrices(''), {});
+  assert.deepEqual(rail.parsePrices(undefined), {});
+  const p = rail.parsePrices('X0123000001');
+  assert.deepEqual(p, { 座位代码X: 123 });
+});
+
 function row(overrides = {}) {
   const r = new Array(40).fill('');
   r[2] = '76000D199803'; r[3] = 'D1998';
@@ -32,8 +50,12 @@ test('parseTrain:字段解析与余票格式', () => {
   assert.equal(t.startTime, '06:09');
   assert.equal(t.canWebBuy, true);
   assert.deepEqual(t.seats, { 一等座: '7 张', 商务座: '无' });
-  assert.equal(t.fromNo, '01');
-  assert.equal(t.seatTypes, '9MOO');
+  assert.deepEqual(t.prices, {});
+});
+
+test('parseTrain:内嵌票价解码', () => {
+  const t = row({ 39: '9077400001M040500000O025200000O025203000' });
+  assert.deepEqual(t.prices, { 商务座: 774, 一等座: 405, 二等座: 252 });
 });
 
 test('parseTrain:余票"有"格式与不可购车次', () => {
@@ -42,9 +64,3 @@ test('parseTrain:余票"有"格式与不可购车次', () => {
   assert.equal(t.canWebBuy, false);
 });
 
-test('extractPrices:清洗货币符号并跳过无效值', () => {
-  const prices = rail.extractPrices({ A1: '¥1,234.5', M: '728.5', XX: '', O: 0 });
-  assert.equal(prices['商务座'], 1234.5);
-  assert.equal(prices['一等座'], 728.5);
-  assert.equal(prices['XX'] ?? prices['二等座'], undefined);
-});

@@ -1,10 +1,11 @@
-// 12306 接口冒烟测试,由 electron . --smoke=rail 触发(在主进程内跑,net.fetch 才可用)。
+// 12306 接口冒烟测试,由 electron . --smoke=rail 触发(主进程内跑,也可纯 node 直接 node scripts/smoke-12306.cjs)。
 const OUT_FILE = require('path').join(__dirname, 'smoke-output.txt');
 const fs = require('fs');
 
 async function run(log) {
   const rail = require('../lib/rail12306');
-  const args = process.argv.slice(process.argv.indexOf('--smoke=rail') + 1);
+  const idx = process.argv.indexOf('--smoke=rail');
+  const args = idx > -1 ? process.argv.slice(idx + 1) : process.argv.slice(2);
   const [from = '成都东', to = '西安北', date = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10)] = args;
 
   const lines = [];
@@ -18,17 +19,11 @@ async function run(log) {
     const { trains } = await rail.queryTrains(from, to, date);
     say(`共 ${trains.length} 趟车`);
     for (const t of trains.slice(0, 5)) {
-      say(`${t.code} ${t.startTime}→${t.arriveTime} 历时${t.lishi} 可购:${t.canWebBuy} 余票:${JSON.stringify(t.seats)}`);
+      say(`${t.code} ${t.startTime}→${t.arriveTime} 余票:${JSON.stringify(t.seats)} 票价:${JSON.stringify(t.prices)}`);
     }
-    const first = trains.find((t) => t.canWebBuy) || trains[0];
-    if (first) {
-      const { prices, raw } = await rail.trainPrice(first.trainNo, date, first.fromNo, first.toNo, first.seatTypes);
-      say(`\n${first.code} 票价解析结果: ${JSON.stringify(prices)}`);
-      say('原始返回中疑似价格的键值对:');
-      for (const [k, v] of Object.entries(raw)) {
-        if (/^[A-Z0-9]{1,3}$/.test(k)) say(`  ${k} = ${JSON.stringify(v)}`);
-      }
-    }
+    const withPrice = trains.find((t) => t.prices && Object.keys(t.prices).length > 0);
+    if (!withPrice) say('!! 所有车次均未解析出票价,官方 f39 编码可能已变更');
+    else say(`\n票价抽查 OK: ${withPrice.code} ${JSON.stringify(withPrice.prices)}`);
   } catch (e) {
     say(`!! 失败: ${e.message}`);
   } finally {
@@ -37,3 +32,8 @@ async function run(log) {
 }
 
 module.exports = { run };
+
+// 纯 node 直接运行时自动执行
+if (require.main === module) {
+  run((s) => console.log(s)).then(() => process.exit(0));
+}

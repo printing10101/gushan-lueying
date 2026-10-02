@@ -39,6 +39,7 @@ npm run dist         # 打包 portable exe → dist/
 
 ## 已知边界(自用纪律)
 
-- 12306 只读、不登录、低频 + 10 分钟缓存;票价接口校验 TLS 指纹,必须经 Electron 的 Chromium 网络栈访问(纯 node 下余票可用、票价不可用)。
+- 12306 只读、不登录、低频 + 10 分钟缓存。**票价来自余票响应内嵌的价格编码字段**(第 39 字段,座位代码+4位价格+5位标记,已用 G/D/K 车实证),不再调用会对非浏览器请求返回 405 的 queryTicketPrice 接口。
 - 高德免费额度自用绰绰有余;路线规划结果会随版本微调,属正常。
 - 机票价格不做(OTA 加密数据),以后用"预估 + 跳转"兜底。
+- 打包后的 exe 在 `dist/Gushan-portable.exe`;重装系统或换机后先 `npm install && npm run dist`,再以管理员外的普通权限运行 `scripts/make-shortcut.ps1`(带 BOM,勿用无 BOM 编辑器重存)重建桌面快捷方式。

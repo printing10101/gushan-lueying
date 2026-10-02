@@ -8,7 +8,7 @@
   "scripts": {
     "app": "electron .",
     "test": "node --test test/*.test.mjs",
-    "smoke:rail": "electron . --smoke=rail",
+    "smoke:rail": "node scripts/smoke-12306.cjs",
     "smoke:amap": "node scripts/smoke-amap.mjs",
     "dist": "electron-builder --win portable"
   },

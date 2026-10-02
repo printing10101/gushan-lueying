@@ -22,13 +22,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  if (process.argv.includes('--smoke=rail')) {
-    require('../scripts/smoke-12306.cjs')
-      .run((s) => console.log(s))
-      .catch((e) => console.error('smoke 失败:', e))
-      .finally(() => app.quit());
-    return;
-  }
   store.ensureConfig();
   createWindow();
 });
