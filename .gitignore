@@ -4,3 +4,4 @@ data/config.json
 data/stations.json
 data/trips/
 *.log
+scripts/smoke-output.txt
