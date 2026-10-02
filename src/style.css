@@ -1,0 +1,35 @@
+* { box-sizing: border-box; margin: 0; }
+body { font-family: "Microsoft YaHei", sans-serif; font-size: 14px; color: #2c3e50; height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; align-items: baseline; gap: 12px; padding: 10px 16px; background: #1e3a2f; color: #fff; }
+header h1 { font-size: 18px; }
+#config-hint { font-size: 12px; color: #f0c674; }
+main { flex: 1; display: grid; grid-template-columns: 260px 1fr 400px; min-height: 0; }
+aside, section { padding: 12px; overflow-y: auto; }
+#panel-left { background: #f4f6f5; border-right: 1px solid #dde3e0; }
+#panel-right { background: #fafaf8; border-left: 1px solid #dde3e0; }
+label { display: block; margin-bottom: 10px; font-weight: bold; }
+label input, label select { display: block; width: 100%; margin-top: 4px; padding: 6px; border: 1px solid #c4ccc8; border-radius: 4px; font-size: 13px; }
+button { width: 100%; padding: 9px; background: #1e6f50; color: #fff; border: 0; border-radius: 4px; font-size: 15px; cursor: pointer; }
+button:hover { background: #175a40; }
+#left-msg { margin-top: 10px; font-size: 12px; color: #b03a2e; white-space: pre-wrap; }
+#map { height: 62%; border: 1px solid #dde3e0; border-radius: 4px; }
+#weather-strip { margin-top: 10px; display: flex; gap: 4px; overflow-x: auto; }
+.wx { flex: 0 0 64px; text-align: center; font-size: 11px; padding: 6px 2px; border-radius: 4px; background: #eef2f0; }
+.wx .v-宜 { color: #1e8449; font-weight: bold; }
+.wx .v-观察 { color: #d68910; font-weight: bold; }
+.wx .v-不宜 { color: #b03a2e; font-weight: bold; }
+.day { border: 1px solid #dde3e0; border-radius: 6px; padding: 10px; margin-bottom: 10px; background: #fff; }
+.day h3 { font-size: 14px; margin-bottom: 6px; }
+.day .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 3px; margin-right: 6px; color: #fff; }
+.tag-drive { background: #2471a3; } .tag-hike { background: #1e8449; } .tag-rail { background: #7d6608; } .tag-note { background: #888; }
+.day table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.day td { padding: 3px 4px; border-bottom: 1px dashed #e8ecea; }
+.warn { color: #b03a2e; font-size: 12px; }
+.muted { color: #95a5a6; }
+.budget { border: 1px solid #dde3e0; border-radius: 6px; padding: 10px; background: #fff; }
+.budget table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.budget td { padding: 4px; border-bottom: 1px solid #eef1ef; }
+.budget .total td { font-weight: bold; border-top: 2px solid #2c3e50; }
+details { font-size: 12px; margin-top: 6px; }
+summary { cursor: pointer; color: #2471a3; }
+input#origin { font-weight: normal; }

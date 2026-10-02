@@ -1,0 +1,11 @@
+{
+  "amapKeyWeb": "",
+  "amapKeyJs": "",
+  "fuel": {
+    "consumptionLPer100km": 8,
+    "pricePerL": 8.2,
+    "_说明": "按你的车改:百公里油耗(L)和当前油价(元/L)"
+  },
+  "maxDriveKmPerDay": 400,
+  "_说明": "amapKeyWeb=Web服务类型(路径规划),amapKeyJs=Web端JS API(地图显示),都在 lbs.amap.com 创建"
+}

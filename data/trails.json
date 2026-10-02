@@ -1,0 +1,38 @@
+{
+  "changpinggou": {
+    "name": "四姑娘山·长坪沟",
+    "regionId": "chuanxi",
+    "node": "四姑娘山镇",
+    "days": 1,
+    "climbM": 600,
+    "difficulty": "轻松",
+    "start": { "lng": 102.912, "lat": 31.099 },
+    "tickets": 270,
+    "supplies": "沟内木栈道,可骑马,镇上补给完善",
+    "notes": "门票含观光车;徒步到木骡子约14km往返,海拔3200-3760m"
+  },
+  "haizigou": {
+    "name": "四姑娘山·海子沟",
+    "regionId": "chuanxi",
+    "node": "四姑娘山镇",
+    "days": 1,
+    "climbM": 800,
+    "difficulty": "中等",
+    "start": { "lng": 102.907, "lat": 31.105 },
+    "tickets": 80,
+    "supplies": "无补给点,自带水粮;可骑马",
+    "notes": "大海子往返约16km,全程3000m+海拔,风景原始"
+  },
+  "dangling": {
+    "name": "丹巴·党岭葫芦海",
+    "regionId": "chuanxi",
+    "node": "丹巴",
+    "days": 2,
+    "climbM": 900,
+    "difficulty": "中等",
+    "start": { "lng": 101.741, "lat": 31.013 },
+    "tickets": 60,
+    "supplies": "党岭村可住宿/雇马帮,村以上无补给",
+    "notes": "党岭村到葫芦海往返约18km;村子距丹巴县城约68km土路,驾车另算一天更稳妥"
+  }
+}

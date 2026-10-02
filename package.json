@@ -1,0 +1,37 @@
+{
+  "name": "gushan-lueying",
+  "version": "0.1.0",
+  "private": true,
+  "description": "孤山掠影:自驾×徒步混合行程规划桌面应用(自用)",
+  "main": "electron/main.js",
+  "productName": "孤山掠影",
+  "scripts": {
+    "app": "electron .",
+    "test": "node --test test/*.test.mjs",
+    "smoke:rail": "electron . --smoke=rail",
+    "smoke:amap": "node scripts/smoke-amap.mjs",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.gushan.lueying",
+    "productName": "孤山掠影",
+    "asar": false,
+    "directories": { "output": "dist" },
+    "files": [
+      "package.json",
+      "electron/**",
+      "lib/**",
+      "src/**",
+      "data/**"
+    ],
+    "win": {
+      "target": ["portable"],
+      "icon": "build/icon.ico",
+      "artifactName": "Gushan-portable.${ext}"
+    }
+  }
+}

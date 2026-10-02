@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>孤山掠影</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>孤山掠影</h1>
+    <span id="config-hint"></span>
+  </header>
+  <main>
+    <aside id="panel-left">
+      <label>区域
+        <select id="region"></select>
+      </label>
+      <label>出发车站
+        <input id="origin" list="station-list" placeholder="如 西安北" value="成都东">
+        <datalist id="station-list"></datalist>
+      </label>
+      <label>出发日期
+        <input id="start-date" type="date">
+      </label>
+      <label>总天数
+        <input id="days" type="number" min="3" max="20" value="7">
+      </label>
+      <label>徒步线路(可选,留空自动选)
+        <select id="trail"><option value="">自动挑选</option></select>
+      </label>
+      <button id="generate">生成行程</button>
+      <div id="left-msg"></div>
+    </aside>
+    <section id="panel-map">
+      <div id="map"></div>
+      <div id="weather-strip"></div>
+    </section>
+    <aside id="panel-right">
+      <div id="result"><p class="muted">生成后这里显示逐日行程与预算</p></div>
+    </aside>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
