@@ -6,17 +6,241 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- 背景:修仙巨构夜景(纯 SVG 手绘,跟随窗口裁切) -->
+  <div id="scene" aria-hidden="true">
+    <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#050B18"/>
+          <stop offset="0.4" stop-color="#0B1830"/>
+          <stop offset="0.72" stop-color="#132848"/>
+          <stop offset="1" stop-color="#1E3E68"/>
+        </linearGradient>
+        <radialGradient id="moonG">
+          <stop offset="0" stop-color="#E9F2FC"/>
+          <stop offset="0.62" stop-color="#C8DCF2"/>
+          <stop offset="1" stop-color="#ACC6E2"/>
+        </radialGradient>
+        <radialGradient id="moonHalo">
+          <stop offset="0" stop-color="#BCD4EE" stop-opacity="0.16"/>
+          <stop offset="0.55" stop-color="#9FBEE8" stop-opacity="0.05"/>
+          <stop offset="1" stop-color="#9FBEE8" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="horizonG">
+          <stop offset="0" stop-color="#4C7FBE" stop-opacity="0.5"/>
+          <stop offset="1" stop-color="#4C7FBE" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="cloudG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#D5E4F6" stop-opacity="0.95"/>
+          <stop offset="1" stop-color="#D5E4F6" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="fogG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#050B18" stop-opacity="0"/>
+          <stop offset="1" stop-color="#050B18" stop-opacity="0.9"/>
+        </linearGradient>
+        <radialGradient id="vig" cx="0.5" cy="0.42" r="0.75">
+          <stop offset="0.55" stop-color="#03070F" stop-opacity="0"/>
+          <stop offset="1" stop-color="#03070F" stop-opacity="0.55"/>
+        </radialGradient>
+        <filter id="b8" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="8"/></filter>
+        <filter id="b12" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="12"/></filter>
+        <filter id="b16" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="16"/></filter>
+        <!-- 中式屋檐剪影:原点在檐口中心,翘檐、凹曲屋面,可用 scale(sx,sy) 缩放复用 -->
+        <path id="roof" d="M -32 -42 L 32 -42 Q 60 -31 90 -12 Q 99 -6 97 0 Q 96 4 88 5 Q 0 15 -88 5 Q -96 4 -97 0 Q -99 -6 -90 -12 Q -60 -31 -32 -42 Z"/>
+        <g id="window"><rect x="-2" y="-2.5" width="4" height="5" rx="1" fill="#F5C078"/></g>
+        <g id="crane" fill="#C7DCF2" opacity="0.8">
+          <path d="M -14 0 Q -7 -5 1 -4 Q 8 -5 14 -1 L 25 -8 L 27 -7 L 16 0 Q 8 4 0 4 Q -7 4 -14 0 Z"/>
+          <path d="M -3 -3 Q -6 -15 4 -20 Q -1 -10 2 -3 Z"/>
+          <path d="M 1 3 Q -1 11 6 15 Q 2 8 4 3 Z"/>
+          <path d="M -13 -1 L -22 -5 L -20 -1 L -13 2 Z"/>
+        </g>
+      </defs>
+
+      <!-- 天幕 · 月 · 星 -->
+      <rect width="1920" height="1080" fill="url(#sky)"/>
+      <g fill="#CBDDF4">
+        <g class="tw tw1">
+          <circle cx="80" cy="90" r="1.3"/><circle cx="210" cy="200" r="0.9"/><circle cx="330" cy="70" r="1.1"/>
+          <circle cx="470" cy="160" r="0.8"/><circle cx="560" cy="60" r="1.2"/><circle cx="120" cy="330" r="1"/>
+          <circle cx="640" cy="230" r="0.9"/><circle cx="740" cy="90" r="1.1"/>
+        </g>
+        <g class="tw tw2">
+          <circle cx="900" cy="150" r="1"/><circle cx="1010" cy="60" r="1.4"/><circle cx="1120" cy="210" r="0.8"/>
+          <circle cx="1240" cy="120" r="1.1"/><circle cx="380" cy="260" r="0.8"/><circle cx="260" cy="120" r="1"/>
+          <circle cx="1700" cy="80" r="1"/><circle cx="1830" cy="200" r="1.2"/>
+        </g>
+        <g class="tw tw3">
+          <circle cx="1600" cy="330" r="0.9"/><circle cx="1750" cy="420" r="1"/><circle cx="90" cy="480" r="0.9"/>
+          <circle cx="520" cy="380" r="1"/><circle cx="860" cy="300" r="0.8"/><circle cx="1330" cy="60" r="1"/>
+          <circle cx="60" cy="210" r="0.8"/><circle cx="1440" cy="380" r="0.9"/>
+        </g>
+      </g>
+      <circle cx="1478" cy="112" r="180" fill="url(#moonHalo)"/>
+      <circle cx="1478" cy="112" r="74" fill="url(#moonG)"/>
+      <ellipse cx="1460" cy="140" rx="185" ry="13" fill="#AFC8E6" opacity="0.18" filter="url(#b8)" transform="rotate(-7 1460 140)"/>
+      <ellipse cx="830" cy="470" rx="560" ry="300" fill="url(#horizonG)"/>
+
+      <!-- 远山两叠 -->
+      <path fill="#1D3A5F" opacity="0.75" d="M0 640 L140 560 L300 640 L470 520 L640 620 L820 540 L1000 630 L1200 540 L1380 640 L1560 550 L1740 650 L1920 590 L1920 1080 L0 1080 Z"/>
+      <path fill="#152A4A" opacity="0.92" d="M0 720 L180 600 L360 700 L520 580 L700 690 L900 600 L1100 700 L1300 610 L1500 720 L1700 620 L1920 700 L1920 1080 L0 1080 Z"/>
+      <!-- 远山小庙(呼应主峰) -->
+      <g fill="#0C1930">
+        <rect x="1552" y="604" width="66" height="7"/>
+        <rect x="1566" y="590" width="38" height="14"/>
+        <use href="#roof" transform="translate(1585 590) scale(0.24 0.5)"/>
+        <rect x="1610" y="584" width="9" height="20"/>
+        <use href="#roof" transform="translate(1614.5 584) scale(0.11 0.4)"/>
+      </g>
+      <use href="#window" x="1585" y="598"/>
+      <use href="#window" x="1614" y="592"/>
+
+      <!-- 主峰:孤山 -->
+      <path fill="#0D1B31" d="M 430 1080 L 585 780 L 655 560 Q 668 500 690 470 L 700 470 L 960 470 Q 985 505 1000 570 L 1075 800 L 1180 1080 Z"/>
+      <path fill="#5E96D7" opacity="0.1" d="M 585 780 L 655 560 Q 668 500 690 470 L 722 470 L 648 760 L 560 1010 L 430 1080 L 500 1000 Z"/>
+
+      <!-- 登山石阶与灯焰(穿云而上,衬巨构之高) -->
+      <polyline points="552,948 640,812 598,722 668,606 638,518 730,470" fill="none" stroke="#0A1426" stroke-width="4" opacity="0.9"/>
+      <g fill="#F2B96B">
+        <circle cx="560" cy="932" r="1.4"/><circle cx="598" cy="872" r="1.4"/><circle cx="632" cy="816" r="1.4"/>
+        <circle cx="616" cy="768" r="1.4"/><circle cx="602" cy="726" r="1.4"/><circle cx="628" cy="684" r="1.4"/>
+        <circle cx="660" cy="610" r="1.4"/><circle cx="652" cy="646" r="1.4"/><circle cx="646" cy="560" r="1.4"/>
+        <circle cx="640" cy="522" r="1.4"/><circle cx="678" cy="494" r="1.4"/><circle cx="712" cy="474" r="1.4"/>
+      </g>
+      <!-- 山腰小舍(比例用) -->
+      <g fill="#0B1628">
+        <rect x="628" y="800" width="20" height="10"/>
+        <use href="#roof" transform="translate(638 800) scale(0.13 0.45)"/>
+      </g>
+      <use href="#window" x="638" y="805"/>
+
+      <!-- ============ 山巅巨构:宫阙建筑群 ============ -->
+      <g fill="#0A1322">
+        <!-- 玉台基座 -->
+        <rect x="700" y="458" width="260" height="12"/>
+        <!-- 牌坊 -->
+        <rect x="718" y="438" width="5" height="32"/>
+        <rect x="742" y="438" width="5" height="32"/>
+        <rect x="710" y="432" width="45" height="6"/>
+        <use href="#roof" transform="translate(732.5 432) scale(0.22 0.55)"/>
+        <!-- 两庑回廊 -->
+        <rect x="752" y="448" width="40" height="8"/>
+        <rect x="868" y="448" width="40" height="8"/>
+        <use href="#roof" transform="translate(762 448) scale(0.12 0.45)"/>
+        <use href="#roof" transform="translate(780 448) scale(0.12 0.45)"/>
+        <use href="#roof" transform="translate(798 448) scale(0.12 0.45)"/>
+        <use href="#roof" transform="translate(882 448) scale(0.12 0.45)"/>
+        <use href="#roof" transform="translate(900 448) scale(0.12 0.45)"/>
+        <use href="#roof" transform="translate(918 448) scale(0.12 0.45)"/>
+        <!-- 主殿一层 -->
+        <rect x="755" y="428" width="150" height="30"/>
+        <use href="#roof" transform="translate(830 428) scale(0.92 1)"/>
+        <!-- 主殿二层 -->
+        <rect x="778" y="416" width="104" height="12"/>
+        <rect x="792" y="390" width="76" height="26"/>
+        <use href="#roof" transform="translate(830 390) scale(0.6 0.8)"/>
+        <!-- 主殿三层 -->
+        <rect x="800" y="344" width="60" height="12"/>
+        <rect x="810" y="320" width="40" height="24"/>
+        <use href="#roof" transform="translate(830 320) scale(0.42 0.68)"/>
+        <rect x="828.5" y="272" width="3" height="20"/>
+        <circle cx="830" cy="270" r="2.6" fill="#F5C078"/>
+      </g>
+      <!-- 主殿屋脊月光描边 -->
+      <path d="M 798 388 L 862 388 M 816 322 L 844 322" stroke="#9FC2E8" stroke-width="1" opacity="0.35" fill="none"/>
+      <!-- 左:六级浮屠(楼阁式,檐出略宽于塔身) -->
+      <g fill="#0A1322">
+        <rect x="676" y="458" width="28" height="12"/><use href="#roof" transform="translate(690 458) scale(0.23 0.42)"/>
+        <rect x="677" y="432" width="26" height="12"/><use href="#roof" transform="translate(690 432) scale(0.22 0.42)"/>
+        <rect x="678" y="406" width="24" height="12"/><use href="#roof" transform="translate(690 406) scale(0.21 0.42)"/>
+        <rect x="679" y="380" width="22" height="12"/><use href="#roof" transform="translate(690 380) scale(0.2 0.42)"/>
+        <rect x="680" y="354" width="20" height="12"/><use href="#roof" transform="translate(690 354) scale(0.19 0.42)"/>
+        <rect x="681" y="328" width="18" height="12"/><use href="#roof" transform="translate(690 328) scale(0.18 0.42)"/>
+        <rect x="689" y="294" width="2" height="16"/><circle cx="690" cy="292" r="2" fill="#F5C078"/>
+      </g>
+      <!-- 右:五级浮屠 -->
+      <g fill="#0A1322">
+        <rect x="956" y="458" width="28" height="12"/><use href="#roof" transform="translate(970 458) scale(0.23 0.42)"/>
+        <rect x="957" y="432" width="26" height="12"/><use href="#roof" transform="translate(970 432) scale(0.22 0.42)"/>
+        <rect x="958" y="406" width="24" height="12"/><use href="#roof" transform="translate(970 406) scale(0.21 0.42)"/>
+        <rect x="959" y="380" width="22" height="12"/><use href="#roof" transform="translate(970 380) scale(0.2 0.42)"/>
+        <rect x="960" y="354" width="20" height="12"/><use href="#roof" transform="translate(970 354) scale(0.19 0.42)"/>
+        <rect x="969" y="322" width="2" height="14"/><circle cx="970" cy="320" r="2" fill="#F5C078"/>
+      </g>
+      <!-- 窗灯(人间烟火) -->
+      <g>
+        <use href="#window" x="768" y="440"/><use href="#window" x="782" y="440"/><use href="#window" x="796" y="440"/>
+        <rect x="824" y="436" width="6" height="14" rx="1.5" fill="#F5C078" opacity="0.9"/>
+        <use href="#window" x="846" y="440"/><use href="#window" x="860" y="440"/><use href="#window" x="874" y="440"/><use href="#window" x="890" y="440"/>
+        <use href="#window" x="762" y="452"/><use href="#window" x="780" y="452"/><use href="#window" x="886" y="452"/><use href="#window" x="904" y="452"/>
+        <use href="#window" x="802" y="400"/><use href="#window" x="816" y="400"/>
+        <rect x="827" y="398" width="6" height="12" rx="1.5" fill="#F5C078" opacity="0.9"/>
+        <use href="#window" x="844" y="400"/><use href="#window" x="856" y="400"/>
+        <use href="#window" x="820" y="330"/><use href="#window" x="840" y="330"/>
+        <use href="#window" x="690" y="464"/><use href="#window" x="690" y="438"/><use href="#window" x="690" y="412"/>
+        <use href="#window" x="690" y="386"/><use href="#window" x="690" y="360"/><use href="#window" x="690" y="334"/>
+        <use href="#window" x="970" y="464"/><use href="#window" x="970" y="438"/><use href="#window" x="970" y="412"/>
+        <use href="#window" x="970" y="386"/><use href="#window" x="970" y="360"/>
+        <use href="#window" x="720" y="452"/><use href="#window" x="745" y="452"/><use href="#window" x="935" y="452"/><use href="#window" x="948" y="452"/>
+      </g>
+
+      <!-- 仙鹤三只 -->
+      <use href="#crane" transform="translate(560 336) scale(1.1)" class="crane-a"/>
+      <use href="#crane" transform="translate(1178 268) scale(-0.9 0.9)" class="crane-b"/>
+      <use href="#crane" transform="translate(1298 468) scale(0.65)" class="crane-c"/>
+
+      <!-- 云海四带(漂移,起伏错落) -->
+      <g class="cloud-a" filter="url(#b8)" fill="url(#cloudG)" opacity="0.13">
+        <ellipse cx="430" cy="658" rx="190" ry="22"/><ellipse cx="610" cy="650" rx="150" ry="18"/>
+        <ellipse cx="760" cy="662" rx="230" ry="26"/><ellipse cx="940" cy="652" rx="160" ry="20"/>
+        <ellipse cx="1120" cy="660" rx="210" ry="24"/><ellipse cx="1300" cy="654" rx="150" ry="18"/>
+        <ellipse cx="520" cy="644" rx="70" ry="12"/><ellipse cx="860" cy="642" rx="60" ry="10"/><ellipse cx="1210" cy="646" rx="80" ry="12"/>
+      </g>
+      <g class="cloud-b" filter="url(#b12)" fill="url(#cloudG)" opacity="0.16">
+        <ellipse cx="300" cy="748" rx="240" ry="28"/><ellipse cx="520" cy="738" rx="170" ry="20"/>
+        <ellipse cx="700" cy="752" rx="280" ry="30"/><ellipse cx="960" cy="742" rx="200" ry="24"/>
+        <ellipse cx="1180" cy="752" rx="260" ry="28"/><ellipse cx="1450" cy="744" rx="190" ry="24"/><ellipse cx="1680" cy="752" rx="240" ry="28"/>
+        <ellipse cx="420" cy="730" rx="80" ry="12"/><ellipse cx="860" cy="728" rx="70" ry="11"/><ellipse cx="1330" cy="732" rx="90" ry="13"/>
+      </g>
+      <g class="cloud-c" filter="url(#b12)" fill="url(#cloudG)" opacity="0.19">
+        <ellipse cx="220" cy="878" rx="300" ry="34"/><ellipse cx="470" cy="868" rx="200" ry="24"/>
+        <ellipse cx="660" cy="882" rx="320" ry="36"/><ellipse cx="980" cy="872" rx="240" ry="28"/>
+        <ellipse cx="1240" cy="884" rx="300" ry="34"/><ellipse cx="1560" cy="874" rx="220" ry="28"/><ellipse cx="1800" cy="884" rx="240" ry="30"/>
+        <ellipse cx="350" cy="852" rx="90" ry="14"/><ellipse cx="840" cy="850" rx="80" ry="12"/><ellipse cx="1400" cy="854" rx="100" ry="14"/>
+      </g>
+      <g class="cloud-d" filter="url(#b16)" fill="url(#cloudG)" opacity="0.23">
+        <ellipse cx="380" cy="1005" rx="380" ry="40"/><ellipse cx="650" cy="995" rx="240" ry="30"/>
+        <ellipse cx="900" cy="1008" rx="420" ry="44"/><ellipse cx="1250" cy="998" rx="280" ry="34"/><ellipse cx="1550" cy="1006" rx="380" ry="42"/>
+        <ellipse cx="520" cy="980" rx="110" ry="16"/><ellipse cx="1100" cy="978" rx="100" ry="15"/>
+      </g>
+
+      <!-- 前景山脊与雾、暗角 -->
+      <path fill="#071020" d="M0 964 L160 900 L340 952 L540 892 L760 956 L980 900 L1200 958 L1420 902 L1640 950 L1820 908 L1920 944 L1920 1080 L0 1080 Z"/>
+      <rect y="880" width="1920" height="200" fill="url(#fogG)"/>
+      <rect width="1920" height="1080" fill="url(#vig)"/>
+    </svg>
+  </div>
+
   <header>
-    <h1>孤山掠影</h1>
-    <nav id="tabs">
-      <button class="tab active" data-view="planner">行程规划</button>
-      <button class="tab" data-view="library">路线库</button>
+    <div class="brand">
+      <span class="seal"><i>孤</i><i>山</i><i>掠</i><i>影</i></span>
+      <div class="brand-text">
+        <h1>孤山掠影</h1>
+        <p>自驾 · 徒步 · 行程规划</p>
+      </div>
+    </div>
+    <nav id="tabs" role="tablist">
+      <button class="tab active" data-view="planner" role="tab" aria-selected="true">行程规划</button>
+      <button class="tab" data-view="recommend" role="tab" aria-selected="false">智能推荐</button>
+      <button class="tab" data-view="library" role="tab" aria-selected="false">路线库</button>
+      <button class="tab" data-view="archive" role="tab" aria-selected="false">行程档案</button>
     </nav>
     <span id="config-hint"></span>
   </header>
+
   <div id="view-planner">
     <main>
       <aside id="panel-left">
+        <h2 class="panel-title">规划要素</h2>
         <label>区域
           <select id="region"></select>
         </label>
@@ -30,26 +254,51 @@
         <label>总天数
           <input id="days" type="number" min="3" max="20" value="7">
         </label>
+        <label>出行人数
+          <input id="headcount" type="number" min="1" max="12" value="1">
+        </label>
         <label>徒步线路(可选,留空自动选)
           <select id="trail"><option value="">自动挑选</option></select>
         </label>
+        <div id="trail-fit" class="fit-hint" hidden></div>
         <button id="generate">生成行程</button>
         <div id="left-msg"></div>
       </aside>
       <section id="panel-map">
+        <span class="map-poem">行到水穷处 · 坐看云起时</span>
         <div id="map"></div>
         <div id="weather-strip"></div>
+        <div id="region-brief" hidden></div>
       </section>
       <aside id="panel-right">
         <div id="result"><p class="muted">生成后这里显示逐日行程与预算</p></div>
       </aside>
     </main>
   </div>
+
+  <div id="view-recommend" hidden>
+    <div id="rec-form">
+      <div id="rec-inputs">
+        <input id="rec-budget" type="number" min="0" step="100" placeholder="人均预算 ¥(可留空)" aria-label="人均预算(元)">
+        <input id="rec-days" type="number" min="1" max="30" placeholder="最多天数(可留空)" aria-label="最多天数">
+        <input id="rec-origin" list="rec-station-list" placeholder="出发站(估往返火车,可留空)" aria-label="出发车站">
+        <datalist id="rec-station-list"></datalist>
+        <select id="rec-province" aria-label="限定省份"><option value="">全部省份</option></select>
+        <button id="rec-go">帮我推荐</button>
+      </div>
+      <div id="rec-scenery"></div>
+    </div>
+    <div id="rec-msg" class="warn"></div>
+    <div id="rec-count" class="muted"></div>
+    <div id="rec-list"><p class="muted" style="padding:12px">填一个人均预算或出发站,或点几个想看的景色,我来挑路线。禁入/关闭的线路不会出现在结果里。</p></div>
+  </div>
+
   <div id="view-library" hidden>
+    <div id="lib-fitness" hidden></div>
     <div id="lib-filters">
-      <input id="lib-search" placeholder="搜索名称 / 地区 / 简介">
-      <select id="lib-province"><option value="">全部省份</option></select>
-      <select id="lib-grade">
+      <input id="lib-search" placeholder="搜山寻路…" aria-label="搜索线路">
+      <select id="lib-province" aria-label="按省份筛选"><option value="">全部省份</option></select>
+      <select id="lib-grade" aria-label="按难度筛选">
         <option value="">全部难度</option>
         <option value="5">★5 极限</option>
         <option value="4">★4 高难</option>
@@ -57,24 +306,43 @@
         <option value="2">★2 入门</option>
         <option value="1">★1 休闲</option>
       </select>
-      <select id="lib-type"><option value="">全部类型</option></select>
-      <select id="lib-status">
+      <select id="lib-type" aria-label="按类型筛选"><option value="">全部类型</option></select>
+      <select id="lib-status" aria-label="按状态筛选">
         <option value="">全部状态</option>
         <option value="开放">开放</option>
         <option value="部分管控">部分管控</option>
         <option value="管控">管控</option>
         <option value="禁入/关闭">禁入/关闭</option>
       </select>
-      <select id="lib-sort">
+      <select id="lib-mark" aria-label="按标记筛选">
+        <option value="">全部标记</option>
+        <option value="wanted">只看想去</option>
+        <option value="done">只看走过</option>
+      </select>
+      <select id="lib-sort" aria-label="排序方式">
         <option value="grade">按难度排序</option>
         <option value="climb">按累计爬升</option>
         <option value="days">按天数</option>
         <option value="name">按名称</option>
       </select>
+      <button id="lib-reload" title="手改 data/trails.json 后点此生效,无需重启">重载线路库</button>
     </div>
     <div id="lib-count" class="muted"></div>
     <div id="lib-list"></div>
   </div>
+
+  <div id="view-archive" hidden>
+    <div id="arch-count" class="muted"></div>
+    <div id="arch-list"></div>
+  </div>
+
+  <!-- 纯函数口径模块:主进程 require 同一份,渲染端挂 window.GushanLib 复用 -->
+  <script>window.GushanLib = {};</script>
+  <script src="../lib/seat.js"></script>
+  <script src="../lib/recommend.js"></script>
+  <script src="../lib/grading.js"></script>
+  <script src="../lib/gear.js"></script>
+  <script src="../lib/fitness.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
