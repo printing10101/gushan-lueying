@@ -9,7 +9,8 @@
     "app": "electron .",
     "test": "node --test test/*.test.mjs",
     "smoke:rail": "node scripts/smoke-12306.cjs",
-    "smoke:amap": "node scripts/smoke-amap.mjs",
+    "smoke:region": "node scripts/smoke-region.mjs",
+    "preview": "node test/make-preview.mjs && node scripts/preview-server.mjs",
     "dist": "electron-builder --win portable"
   },
   "devDependencies": {
@@ -26,7 +27,12 @@
       "electron/**",
       "lib/**",
       "src/**",
-      "data/**"
+      "data/**",
+      "!data/config.json",
+      "!data/marks.json",
+      "!data/stations.json",
+      "!data/oilprice.json",
+      "!data/trips/**"
     ],
     "win": {
       "target": ["portable"],
