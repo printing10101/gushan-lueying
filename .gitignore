@@ -2,6 +2,11 @@ node_modules/
 dist/
 data/config.json
 data/stations.json
+data/oilprice.json
 data/trips/
+data/marks.json
 *.log
 scripts/smoke-output.txt
+test/preview.html
+.mimosa/
+.zcode/

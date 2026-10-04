@@ -2,6 +2,7 @@ import { createRequire } from 'module';
 const require = createRequire(new URL('../package.json', import.meta.url));
 const store = require('./lib/store.js');
 const { computeBreakdown } = require('./lib/grading.js');
+const { SCENERY } = require('./lib/recommend.js');
 const test = require('node:test');
 const assert = require('node:assert');
 
@@ -28,6 +29,17 @@ test('全量校验:必填字段 / 词汇表 / 坐标 / 评级与指标建议相�
     assert.ok(STATUSES.includes(t.status), `${id} 非法状态 ${t.status}`);
     assert.ok(t.start.lng >= 73 && t.start.lng <= 136 && t.start.lat >= 3 && t.start.lat <= 54, `${id} 坐标异常`);
     assert.ok(t.distanceKm <= 60 * t.days, `${id} 日均里程超 60km,数据可疑`);
+    // 景色标签可以留空(确实无标志景观的技术线),但不能有词表外的值,否则推荐页会漏出未知筛选
+    assert.ok(Array.isArray(t.scenery), `${id} 缺 scenery 数组(可为空)`);
+    assert.ok(t.scenery.every((s) => SCENERY.includes(s)), `${id} scenery 含词表外标签: ${t.scenery.filter((s) => !SCENERY.includes(s)).join('、')}`);
+    assert.equal(new Set(t.scenery).size, t.scenery.length, `${id} scenery 有重复标签`);
+    // 结构化月份(手标或 bestSeason 解析回填):必须是 1-12 的去重整数月
+    if (t.bestMonths != null) {
+      assert.ok(Array.isArray(t.bestMonths) && t.bestMonths.length > 0, `${id} bestMonths 应为非空数组`);
+      assert.ok(t.bestMonths.every((m) => Number.isInteger(m) && m >= 1 && m <= 12),
+        `${id} bestMonths 越界: ${t.bestMonths}`);
+      assert.equal(new Set(t.bestMonths).size, t.bestMonths.length, `${id} bestMonths 有重复月份`);
+    }
 
     const suggested = computeBreakdown(t).suggested;
     const gap = Math.abs(t.grade - suggested);

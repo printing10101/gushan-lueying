@@ -4,8 +4,23 @@
   "fuel": {
     "consumptionLPer100km": 8,
     "pricePerL": 8.2,
-    "_说明": "按你的车改:百公里油耗(L)和当前油价(元/L)"
+    "gasType": "92#",
+    "_说明": "按你的车改:百公里油耗(L)、gasType 油种(92#/95#/0#)、pricePerL 备用油价(元/L,分省实价没取到时才用)"
   },
   "maxDriveKmPerDay": 400,
-  "_说明": "amapKeyWeb=Web服务类型(路径规划),amapKeyJs=Web端JS API(地图显示),都在 lbs.amap.com 创建"
+  "flightCityPinyin": "xian",
+  "runos": {
+    "baseUrl": "http://127.0.0.1:8000",
+    "_说明": "RunOS(运动数据平台)本地服务地址;启动 RunOS 后,路线库会给出基于近期身体状态的选线建议"
+  },
+  "lodging": {
+    "perRoomPerNight": 200,
+    "peoplePerRoom": 2,
+    "_说明": "住宿估算:每间每晚房价,一间住几人(人数÷每间人数向上取整算房间数)"
+  },
+  "food": {
+    "perPersonPerDay": 80,
+    "_说明": "餐饮估算:每人每天餐标"
+  },
+  "_说明": "amapKeyWeb=Web服务类型(路径规划),amapKeyJs=Web端JS API(地图显示),都在 lbs.amap.com 创建;flightCityPinyin=常住城市拼音(12306 无票时「查机票」跳携程用,目的地取区域库 hub.flightCity)"
 }
