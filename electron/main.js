@@ -77,30 +77,26 @@ ipcMain.handle('trails:recommend', wrap(async (input) => {
   const cfg = { ...(store.read('config') || {}), regionStay: recommend.regionStayMap(regions) };
 
   // 体能上限做默认难度闸门:RunOS 有数据就自动收窄到「当前能驾驭的难度」,取不到就不设限
-  // (fetchBodyState 自带 10 分钟缓存,未启动时返回 dataReady:false 而非抛错,不影响推荐)。
-  // 用户在表单里显式选了难度档时以选择为准,不覆盖——手选优先于自动。
-  let ableCap = null;
-  let bodyHint = null;
-  try {
-    const bodyState = await runos.fetchBodyState(store.read('config') || {}, {});
-    if (bodyState?.dataReady) {
-      ableCap = fitness.ableGrade(bodyState);
-      bodyHint = ableCap == null ? null : `体能上限★${ableCap}`;
-    }
-  } catch { /* 联动失败不挡推荐,退化为不设难度上限 */ }
-
   const picked = input || {};
-  const gradeMin = Number.isFinite(picked.gradeMin) ? picked.gradeMin : null;
-  const gradeMax = Number.isFinite(picked.gradeMax)
-    ? picked.gradeMax
-    : (picked.useFitness === false ? null : ableCap);
+  // 手选优先于自动:显式传了有限数字就用手选的,没传(或传 null)才回落到体能上限。
+  // 判定与 auto 标记都在 recommend.difficultyGate(纯函数、可单测)里做,
+  // 这里只负责取体能上限——不要在两处各判一次,逻辑会漂。
+  // 注意 spread 顺序:...picked 必须在最前,否则 picked.gradeMax=null 会覆盖后面算好的 gate.gradeMax,
+  // 导致「未选难度时按体能自动收窄」静默失效(已踩过一次)。
+  const ableCap = await currentAbleCap();
+  const gate = recommend.difficultyGate({
+    userPicked: picked.gradeMax, useFitness: picked.useFitness, ableCap,
+  });
 
   const list = recommend.rank({
-    excludeIds: doneIds, gradeMin, gradeMax,
     ...picked,
+    excludeIds: doneIds,
+    gradeMin: Number.isFinite(picked.gradeMin) ? picked.gradeMin : null,
+    gradeMax: gate.gradeMax,
     limit: 30,
   }, readData('trails') || {}, cfg);
-  if (!picked.originStation) return withHint(list, gradeMax, bodyHint, picked);
+  const bodyHint = gate.auto && ableCap != null ? `体能上限★${ableCap}` : null;
+  if (!picked.originStation) return withHint(list, gate, bodyHint);
   const enriched = await recommend.enrichWithTransport(list, {
     originStation: picked.originStation,
     regions,
@@ -108,12 +104,23 @@ ipcMain.handle('trails:recommend', wrap(async (input) => {
     scenery: picked.scenery || [],
     estimate: rail.estimateRoundTrip,
   });
-  return withHint(enriched.slice(0, 12), gradeMax, bodyHint, picked);
+  return withHint(enriched.slice(0, 12), gate, bodyHint);
 }));
 
-// 难度闸门口径回传给渲染层:让卡片明说「按体能收窄到★N」而不是让用户猜结果为什么变少了
-function withHint(list, gradeMax, bodyHint, input) {
-  return Object.assign(list, { __gate: { gradeMax, bodyHint, auto: !Number.isFinite(input?.gradeMax) } });
+// 当前体能对应的难度上限:RunOS 有数据才算,算不出返回 null(退化为不设限,宁缺毋编)。
+// fetchBodyState 自带 10 分钟缓存,未启动时返回 dataReady:false 而非抛错,不拖累推荐。
+async function currentAbleCap() {
+  try {
+    const state = await runos.fetchBodyState(store.read('config') || {}, {});
+    return state?.dataReady ? fitness.ableGrade(state) : null;
+  } catch {
+    return null;
+  }
+}
+
+// 闸门口径随结果一起回传,渲染端据此在结果栏说明「为什么变少了」
+function withHint(list, gate, bodyHint) {
+  return Object.assign(list, { __gate: { ...gate, bodyHint } });
 }
 // 线路库卡片展开时按需估算该线所属区域枢纽的往返火车;没接规划/出发站即枢纽的返回 null。
 // 带上枢纽坐标:无直达车时 rail12306 会按距离挑中转枢纽估两段价。

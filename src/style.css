@@ -695,7 +695,7 @@ details.evidence pre {
 .qf {
   background: rgba(169, 204, 227, 0.06);
   border: 1px solid rgba(169, 204, 227, 0.12);
-  border-radius: var(--glacier-radius, 8px);
+  border-radius: 8px;
   padding: 3px 10px;
   font-size: 12px;
   color: var(--ink-dim);

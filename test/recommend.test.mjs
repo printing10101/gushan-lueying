@@ -66,6 +66,25 @@ test('难度闸门优先于景色:★5 长线不能只因命中景色就混进�
   assert.equal(rank({ scenery: ['雪山'], limit: 10 }, trails, CFG).length, 2);
 });
 
+// difficultyGate 抽成纯函数就是为了锁住这个回归点:此前 main.js 里
+// `{excludeIds, gradeMin, gradeMax, ...picked}` 的展开顺序让 picked.gradeMax=null
+// 覆盖了体能上限,「未选难度时按体能自动收窄」静默失效——单测通过但功能是坏的。
+test('difficultyGate:手选优先于自动,关掉联动则不设限', () => {
+  const g = require('./lib/recommend.js').difficultyGate;
+  // 前端「难度不限」传的是 null(不是 undefined),必须能回落到体能上限
+  assert.deepEqual(g({ userPicked: null, ableCap: 2 }), { gradeMax: 2, auto: true });
+  assert.deepEqual(g({ userPicked: undefined, ableCap: 3 }), { gradeMax: 3, auto: true });
+  // 显式选档 → 用手选的,且不算自动收窄(否则 UI 会谎报"已按体能收窄")
+  assert.deepEqual(g({ userPicked: 4, ableCap: 2 }), { gradeMax: 4, auto: false });
+  // 关掉联动 → 不设限,且 auto 必须 false
+  assert.deepEqual(g({ userPicked: null, useFitness: false, ableCap: 2 }), { gradeMax: null, auto: false });
+  // 体能取不到 → 不设限,auto 为 false(不能声称收窄过)
+  assert.deepEqual(g({ userPicked: null, ableCap: null }), { gradeMax: null, auto: false });
+  // 0 是有限数字,必须被当成"手选★0"而不是"没填"
+  assert.deepEqual(g({ userPicked: 0, ableCap: 3 }), { gradeMax: 0, auto: false });
+  assert.deepEqual(g({}), { gradeMax: null, auto: false });
+});
+
 test('硬条件:禁入/关闭一律不推,超天数上限不推,管控不排除', () => {
   assert.equal(scoreTrail(trail({ status: '禁入' }), {}, {}), null);
   assert.equal(scoreTrail(trail({ status: '关闭' }), {}, {}), null);
