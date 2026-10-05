@@ -129,9 +129,26 @@ test('近距跨省合法:跨省线路挂在邻省环线上不是错配', () => {
 
 
 test('已标注 regionId 的线路,起点地理上确实靠近该环线(防手工填错)', () => {
+  // 「地理上更近但产品上不该换区」的例外。与 backfill-region.mjs 的
+  // MANUAL_EXCLUDE 同源,两处必须同步改,否则这条测试与回填脚本会互相打脸。
+  // 当前在册的三条,全是建 jingbei2(京北·密云长城环线)后浮出的:
+  //   箭扣长城        ★3/2天/部分管控 野长城  距 jingbei2/鹿皮关 25km
+  //   云蒙山—天仙瀑   1天 山地纵走            距 jingbei2/鹿皮关 10km
+  //   云蒙山青空岭    1天 山地纵走            距 jingbei2/鹿皮关  4km
+  // 三条都维持人工标注 jingxi/北京(72-77km,仍在 80km 阈值内,不构成错配)。
+  // 不换区的理由是产品性的:箭扣与三条 1 天入门长城性质不同,云蒙山两条是
+  // 山地纵走不是长城;换过去会让 jingxi 平白少 3 条可选线路(16→13),而
+  // jingbei2 本身已有 3 条 0km 的入门长城,不缺这三条。即「距离是必要条件,
+  // 不是充分条件」。
+  // 反向断言:若这三条后来真的搬到了 jingbei2(判定变了),过滤器会让它们退出
+  // 例外名单,校验立即恢复对它们的完全敏感——不会留下失效的永久豁免。
+  const KEEP_MANUAL = new Set(
+    ['jiankou', 'yunmengshan', 'yunmengshan-qingkong']
+      .filter((id) => trails[id] && trails[id].regionId === 'jingxi'));
   const offenders = [];
   for (const [id, t] of Object.entries(trails)) {
     if (!t.regionId) continue;
+    if (KEEP_MANUAL.has(id)) continue;
     if (CROSS_BORDER_PROVINCES.has(t.province)) {
       offenders.push(`${t.name}属${t.province},内地车无法自驾跨境,不应挂进 ${t.regionId}`);
       continue;
@@ -209,4 +226,63 @@ test('区域结构:环线闭合 / 铁路站是单一站名 / 节点不重复', (
     }
   }
   assert.equal(problems.length, 0, `区域结构有问题:\n   ${problems.join('\n   ')}`);
+});
+
+// 人工排除名单:地理够近但产品上不该接的线路。
+// 距离只是必要条件不是充分条件——雾灵山距 jingbei2/金山岭 仅 27km,
+// 能接,但它★3/2118m/管控/仅 5-9 月,是独立山体不是长城体系,
+// 接进「京北·密云长城环线」会让区域定位变脏,且 10-12 月无路可走。
+// 排除必须持久:若这条被手工接上,测试立刻红,防止下次跑 --apply 又自动接上。
+// 与 backfill-region.mjs 的 MANUAL_EXCLUDE 同源,两处必须同步改。
+test('人工排除名单的线路必须保持未接入', () => {
+  const MANUAL_EXCLUDE = {
+    wulingshan: '京东第一峰,★3/2118m/管控/仅5-9月,独立山体非长城体系',
+  };
+  for (const [id, why] of Object.entries(MANUAL_EXCLUDE)) {
+    const t = trails[id];
+    assert.ok(t, `排除名单里的 ${id} 不存在于库中,应移除该条目`);
+    assert.ok(!t.regionId,
+      `${t.name} 在人工排除名单里(${why})却已接入 ${t.regionId} —— ` +
+      '要么它其实该接(请改名单),要么排除失效了(请查 backfill-region.mjs 的 MANUAL_EXCLUDE)');
+  }
+});
+
+// 建 jingbei2(京北·密云长城环线)时踩过的坑,值得留一条护栏:
+//
+// 当时方案是「北京→鹿皮关→金山岭→黄崖关→北京」343km,结果地理校验全线告红——
+// 新区域带一个北京市中心节点,就把 jingxi 16 条北京西郊线路的归属抢走。
+// 换枢纽(北京西/清河/通州/顺义/承德/蓟州/兴隆/怀柔)全都试过,抢的数量
+// 只增不减,因为**抢不抢由三条长城的节点位置决定,与第 0 节点选谁无关**。
+// 最后把起点放到京东本地县城「密云」,环线反而缩到 208km(-39%)。
+//
+// 这条测试锁住两件事:
+//  ① 三条长城确实接上了(防止区域被误删或线路被误移);
+//  ② 例外名单没有悄悄变长(防止「距离不够就加一条豁免」这种绕路)。
+test('jingbei2:三条入门长城已接入,且地理豁免名单没有膨胀', () => {
+  const EXPECTED = {
+    lupiguan: '鹿皮关',
+    jinshanling: '金山岭',
+    huangyaguan: '黄崖关',
+  };
+  for (const [id, node] of Object.entries(EXPECTED)) {
+    const t = trails[id];
+    assert.ok(t, `线路 ${id} 不存在`);
+    assert.equal(t.regionId, 'jingbei2', `${t.name} 应接入 jingbei2,现为 ${t.regionId || '(悬空)'}`);
+    assert.equal(t.node, node, `${t.name} 应挂在节点「${node}」,现为 ${t.node}`);
+  }
+  // 环线闭合:planner 按 loop[i]→loop[i+1] 生成 leg,首尾不重合就没有返程
+  const loop = regions.jingbei2.loop;
+  assert.equal(loop[0].name, loop[loop.length - 1].name, '环线未闭合');
+  // loop[0] 刻意是密云县城而非北京市中心——这是化解与 jingxi 抢归属的关键,
+  // 若哪天被"统一成省会惯例"改回「北京」,这条断言会立刻红。
+  assert.equal(loop[0].name, '密云',
+    `loop[0] 应保持「密云」,现为「${loop[0].name}」——改回北京市中心会与 jingxi 抢 16 条线路归属`);
+
+  // 豁免名单只应包含那三条「地理更近但不该换区」的,多一条都是绕过校验
+  const KEEP_MANUAL = new Set(
+    ['jiankou', 'yunmengshan', 'yunmengshan-qingkong']
+      .filter((id) => trails[id] && trails[id].regionId === 'jingxi'));
+  assert.equal(KEEP_MANUAL.size, 3,
+    `地理豁免名单应恰为 3 条,现为 ${KEEP_MANUAL.size} 条 —— `
+    + '若新增,必须先回答「为什么这条该豁免」,不能因为距离不够就加一条');
 });

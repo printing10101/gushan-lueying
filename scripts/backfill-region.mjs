@@ -72,6 +72,29 @@ function distanceKm(a, b) {
 //     不该由脚本自动写进数据。
 const CROSS_BORDER = new Set(['香港', '澳门', '台湾']);
 
+// 人工排除名单:地理上够近,但**不该**自动接入。距离只是必要条件,不是充分条件。
+// 每条都必须写明理由,否则「为什么这条特殊」会随时间失传,变成随手删掉的噪音。
+// 与 CROSS_BORDER 的区别:那是硬约束(法规不允许),这里是产品判断(能接但不该接)。
+const MANUAL_EXCLUDE = new Map([
+  ['wulingshan', '京东第一峰,★3/2118m/status=管控/bestMonths 只 5-9 月。'
+    + '距 jingbei2/金山岭 仅 27km 能接,但它是独立山体不是长城体系,'
+    + '接进来会让「京北·密云长城环线」这个区域混入一条看季节就该排除的线,定位变脏'],
+  // 建 jingbei2 的连带反应:这三条原本挂 jingxi/北京,距新区域节点更近
+  // (鹿皮关 25/10/4km),触发地理校验「已标注的最近节点必须属于所挂区域」。
+  // 但「地理上更近」不等于「产品上该换区」:
+  //   · 箭扣是★3/2 天/部分管控的野长城,与该区域三条 1 天入门长城性质不同;
+  //   · 云蒙山两条是山地纵走,和长城不是一类,挂 jingxi/北京(72-77km,仍在
+  //     80km 阈值内)本身不构成错配。
+  // 改标注的代价是 jingxi 平白少 3 条可选线路(16→13),换不来覆盖增长。
+  // 维持原有人工标注,例外登记在 test/trails-data.test.mjs 的 KEEP_MANUAL。
+  // 反向断言:若哪天这三条真的搬到了 jingbei2,这个例外就过时了,必须同步删。
+  ['jiankou', '★3 野长城/2天/部分管控,与 jingbei2 三条入门长城(★1-2 单日)性质不同;'
+    + '维持 jingxi/北京 的人工标注,地理上距新区域更近但不该换区'],
+  ['yunmengshan', '山地纵走/1天,不是长城;维持 jingxi/北京,地理上距 jingbei2/鹿皮关 10km 但不该换区'],
+  ['yunmengshan-qingkong', '山地纵走/1天,不是长城;维持 jingxi/北京,地理上距 jingbei2/鹿皮关 4km 但不该换区'],
+]);
+
+
 function nearestNode(trail) {
   if (!trail.start || !Number.isFinite(trail.start.lng) || !Number.isFinite(trail.start.lat)) {
     return null;
@@ -95,7 +118,11 @@ function nearestNode(trail) {
 // 强制同省会把这两条推去更远的地方,判据反而制造「开过去更远」的行程。
 // 环线跨市界、跨省界是合法的(南太行/河南收山西的王莽岭,距该环线 14km)。
 // 判据与 test/trails-data.test.mjs 的「起点地理上确实靠近该环线」保持一致。
-function assignable(trail, near) {
+function assignable(id, trail, near) {
+  // 人工排除优先于一切:地理够近也���接。理由见MANUAL_EXCLUDE 定义处。
+  if (MANUAL_EXCLUDE.has(id)) {
+    return { ok: false, reason: `人工排除:${MANUAL_EXCLUDE.get(id)}` };
+  }
   if (CROSS_BORDER.has(trail.province)) {
     return { ok: false, reason: '跨境线路,内地车无法自驾往返(需配额或通关)' };
   }
@@ -111,8 +138,13 @@ function assignable(trail, near) {
 }
 
 // ── 第1 步:校验已有人工标注,不一致就报出来(不改写) ──
+// 已在 MANUAL_EXCLUDE 里明确裁决为「维持原标注」的不算冲突——
+// 那是人工判断的产物(地理上更近但产品上不该换区),不是待裁决项。
+// 早期版本没做这个区分,导致 MANUAL_EXCLUDE 里的条目一边被承认「不该换区」,
+// 一边又把 --apply 堵死,脚本自己和自己打架。
 const conflicts = [];
-for (const trail of Object.values(trails)) {
+const upheld = [];
+for (const [id, trail] of Object.entries(trails)) {
   if (!trail.regionId) continue;
   const near = nearestNode(trail);
   if (!near) {
@@ -120,10 +152,12 @@ for (const trail of Object.values(trails)) {
     continue;
   }
   if (near.regionId !== trail.regionId) {
-    conflicts.push({
+    const record = {
       name: trail.name, reason: `人工标注 ${trail.regionId} ≠ 最近节点所属 ${near.regionId}`,
       km: Math.round(near.km),
-    });
+    };
+    if (MANUAL_EXCLUDE.has(id)) upheld.push({ ...record, why: MANUAL_EXCLUDE.get(id) });
+    else conflicts.push(record);
   }
 }
 
@@ -138,7 +172,7 @@ for (const [id, trail] of Object.entries(trails)) {
   const near = nearestNode(trail);
   if (!near) continue;
   const pick = near;
-  const ok = assignable(trail, pick);
+  const ok = assignable(id, trail, pick);
   if (!trail.regionId) {
     if (!ok.ok) {
       // 距离够近但不可挂的,单独列出来——这些线路在 UI 上显示「未接入」,
@@ -167,6 +201,12 @@ if (conflicts.length) {
   console.log('');
 } else {
   console.log('✓ 已标注的线路全部通过地理校验(最近节点所属区域 == regionId)\n');
+}
+
+if (upheld.length) {
+  console.log(`ℹ 地理上更近但人工维持原标注 ${upheld.length} 条(已在 MANUAL_EXCLUDE 登记,不视为冲突):`);
+  for (const c of upheld) console.log(`   ${c.name} — ${c.reason} (${c.km}km)\n     维持理由:${c.why}`);
+  console.log('');
 }
 
 const byRegion = {};
