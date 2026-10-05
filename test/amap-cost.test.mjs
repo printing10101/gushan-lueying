@@ -60,3 +60,49 @@ test('drivingRoute:坐标非法直接报错,不打高德接口', async () => {
     store.read = realRead;
   }
 });
+
+// 会话级缓存:同一对节点只打一次高德。
+//
+// 这不是优化而是必需品:planner 按 loop[i]→loop[i+1] 逐条查 leg,一个环线
+// 5-8 条(yili 7、zangdongnan 6)。没有缓存时每生成一次行程都要重查全部 leg,
+// 个人 Key 的 QPS(通常 3)会被打爆,配额也按调用次数消耗。
+test('drivingRoute:同一对节点只查一次高德,反向 leg 独立,失败不缓存', async () => {
+  const realFetch = globalThis.fetch;
+  const realRead = store.read;
+  let calls = 0;
+  const A = { lng: 104.0, lat: 30.0 };
+  const B = { lng: 103.0, lat: 31.0 };
+  const body = (km) => ({ ok: true, status: 200, json: async () => ({
+    status: '1', route: { paths: [{ distance: String(km * 1000), duration: '600',
+      cost: { tolls: 0 }, steps: [] }] } }) });
+  try {
+    amap.clearRouteCache();
+    store.read = () => ({ amapKeyWeb: 'test-key' });
+    // 每次返回不同里程:若缓存生效,多次调用必须拿到同一个值
+    globalThis.fetch = async () => { calls += 1; return body(100 + calls); };
+
+    const r1 = await amap.drivingRoute(A, B);
+    const r2 = await amap.drivingRoute(A, B);
+    const r3 = await amap.drivingRoute(A, B);
+    assert.equal(calls, 1, '同一对节点应只请求一次高德');
+    assert.equal(r2.distanceKm, r1.distanceKm, '缓存命中应返回同一结果');
+    assert.equal(r3.distanceKm, r1.distanceKm);
+
+    // 反向是不同 key,不能被误命中
+    await amap.drivingRoute(B, A);
+    assert.equal(calls, 2, '反向 leg 应是独立缓存项');
+
+    // 失败不缓存:否则一次限频会让该 leg 整个会话永久失败
+    amap.clearRouteCache();
+    globalThis.fetch = async () => { calls += 1; return { ok: false, status: 429 }; };
+    await assert.rejects(amap.drivingRoute(A, B), /HTTP 429/);
+    const before = calls;
+    await assert.rejects(amap.drivingRoute(A, B), /HTTP 429/);
+    assert.equal(calls, before + 1,
+      '失败后应重新请求高德,而不是命中失败缓存(否则一次限频会让该 leg 永久失败)');
+  } finally {
+    globalThis.fetch = realFetch;
+    store.read = realRead;
+    amap.clearRouteCache();
+  }
+});
