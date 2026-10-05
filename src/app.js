@@ -3,13 +3,20 @@ const $ = (id) => document.getElementById(id);
 
 // 纯函数口径经 <script> 加载 lib/*.js 挂到 GushanLib,与主进程共用同一实现
 // (此前这里手抄了 9 份副本,lib 一改就静默漂移)
+//
+// 全部加前缀解构,不能裸解构:lib/*.js 是普通 <script>(非 ES module),它们顶层
+// 的 `function pickSeat` 等声明就落在同一个全局作用域里。裸写 `const { pickSeat } = ...`
+// 会与 lib/seat.js 的顶层函数同名 → `SyntaxError: Identifier 'pickSeat' has
+// already been declared` → 整个 app.js 挂掉,界面停在未初始化状态。
+// 这个坑很隐蔽:主进程用 require 完全正常(有独立模块作用域),只有渲染进程炸,
+// 而单测跑不到渲染层——曾实测到 6 个 lib 有 5 个因顶层 `const api` 撞名而静默失败。
 const LIB = window.GushanLib;
-const { pickSeat } = LIB.seat;
-const { costBreakdown, SCENERY } = LIB.recommend;
-const GRADE_LABELS = LIB.grading.GRADE_LABELS;
-const { summitTemp, gearChecklist } = LIB.gear;
-const { quickFacts } = LIB.quickfacts;
-const { FIT_LABELS, ADVICE_LABELS } = LIB.fitness;
+const { pickSeat: seatPick } = LIB.seat;
+const { costBreakdown: costBreakdownOf, SCENERY: SCENERY_TAGS } = LIB.recommend;
+const { GRADE_LABELS: GRADE_TEXT } = LIB.grading;
+const { summitTemp: summitTempOf, gearChecklist: gearChecklistOf } = LIB.gear;
+const { quickFacts: quickFactsOf } = LIB.quickfacts;
+const { FIT_LABELS: FIT_TEXT, ADVICE_LABELS: ADVICE_TEXT } = LIB.fitness;
 
 // HTML 转义:数据(手编 JSON/网络返回/存档/报错原文)不该在页面上长成标签或逃出属性
 function esc(v) {
@@ -152,7 +159,7 @@ function refreshTrailOptions(regionId, selectedId = '') {
   for (const t of libTrails) {
     if (t.regionId === regionId) {
       // 星数与文字必须同用人工评级;_grade.label 是指标建议级,只作详情页交叉校验展示
-      $('trail').append(new Option(`${t.name}(★${t.grade} ${GRADE_LABELS[t.grade] || ''})`, t.id));
+      $('trail').append(new Option(`${t.name}(★${t.grade} ${GRADE_TEXT[t.grade] || ''})`, t.id));
     }
   }
   $('trail').value = selectedId || '';
@@ -327,7 +334,7 @@ function currentOrigin() {
 
 // 与 lib/rail12306.js 的 pickSeat 口径一致(渲染进程拿不到 require);
 // 只在旧档缺 seat 字段时兜底,新生成的行程主进程已算好 leg.seat
-const seatFromPrices = pickSeat;
+const seatFromPrices = seatPick;
 
 function railHtml(leg, label, legKey) {
   if (!leg.chosen) {
@@ -440,8 +447,8 @@ function summitLineHtml(trip, date) {
   const wx = (trip.weather?.forecast || []).find((x) => x.date === date);
   if (!trail || !wx || !Number.isFinite(wx.elevation) || !Number.isFinite(trail.maxAltM)) return '';
   if (trail.maxAltM - wx.elevation < 500) return ''; // 高差太小,折算没有意义
-  const lo = summitTemp(wx.tempMin, wx.elevation, trail.maxAltM);
-  const hi = summitTemp(wx.tempMax, wx.elevation, trail.maxAltM);
+  const lo = summitTempOf(wx.tempMin, wx.elevation, trail.maxAltM);
+  const hi = summitTempOf(wx.tempMax, wx.elevation, trail.maxAltM);
   if (lo == null || hi == null) return '';
   const drop = Math.round(((trail.maxAltM - wx.elevation) / 1000) * 6.5);
   return `<p class="muted">山顶(${trail.maxAltM}m)体感约 ${lo}~${hi}℃,比预报点低约 ${drop}℃</p>`;
@@ -465,7 +472,7 @@ async function exportTripMd() {
   if (!gushan.exportTrip) { alert('当前环境(预览页)不支持导出'); return; }
   try {
     const res = await gushan.exportTrip(`行程-${currentTrip.id}.md`,
-      LIB.tripMarkdown.tripToMarkdown(currentTrip, { gradeLabels: GRADE_LABELS, seatOf: seatFromPrices }));
+      LIB.tripMarkdown.tripToMarkdown(currentTrip, { gradeLabels: GRADE_TEXT, seatOf: seatFromPrices }));
     if (!res.canceled) $('left-msg').textContent = `已导出:${res.filePath}`;
   } catch (e) {
     alert(`导出失败:${e.message}`);
@@ -574,7 +581,11 @@ async function switchTrain(legKey, code) {
   trip.budget.unknownCount = trip.budget.items.length - known.length;
   trip.budget.perPerson = Math.round(trip.budget.total / hc);
   renderResult(trip);
-  const { savedTo, ...archive } = trip; // savedTo 是返回值附带的展示字段,不落盘
+  // savedTo 是返回值附带的展示字段,不落盘。用 rest siblings 写法剔除,
+  // 而不是解构出 const { savedTo, ...archive } —— 后者会留下一个没人用的绑定,
+  // no-unused-vars 会报,且它是真的「没用」,不是「暂时没用」。
+  const archive = { ...trip };
+  delete archive.savedTo;
   try {
     await gushan.writeData(`trips/${trip.id}`, archive);
   } catch (e) {
@@ -741,7 +752,7 @@ function renderBodyPanel() {
       parts.push(`<span class="muted">耐力 ${end}${bodyState.hill?.label ? ` · 爬坡「${esc(bodyState.hill.label)}」` : ''}</span>`);
     }
     if (bodyState.todayAdvice) {
-      parts.push(`<span class="muted">今日建议「${ADVICE_LABELS[bodyState.todayAdvice.level] || esc(bodyState.todayAdvice.level)}」</span>`);
+      parts.push(`<span class="muted">今日建议「${ADVICE_TEXT[bodyState.todayAdvice.level] || esc(bodyState.todayAdvice.level)}」</span>`);
     }
   }
   if (bodyState.staleDays != null && bodyState.staleDays >= 3) {
@@ -759,14 +770,14 @@ function renderBodyPanel() {
 function updateTrailFitHint() {
   const el = $('trail-fit');
   const fit = bodyState?.matches?.[$('trail').value];
-  if (!fit || !FIT_LABELS[fit.level]) { el.hidden = true; return; }
+  if (!fit || !FIT_TEXT[fit.level]) { el.hidden = true; return; }
   el.hidden = false;
-  el.innerHTML = `<span class="fit-badge ft-${esc(fit.level)}">${FIT_LABELS[fit.level]}</span><span>${esc(fit.reasons.join(';'))}</span>`;
+  el.innerHTML = `<span class="fit-badge ft-${esc(fit.level)}">${FIT_TEXT[fit.level]}</span><span>${esc(fit.reasons.join(';'))}</span>`;
 }
 
 // 卡片与行程页共用的匹配文案:主结论 + 不动档位的提醒
 function fitLineHtml(fit) {
-  if (!fit || !FIT_LABELS[fit.level]) return '';
+  if (!fit || !FIT_TEXT[fit.level]) return '';
   const notes = fit.notes.length ? `。另:${fit.notes.join(';')}` : '';
   return `<p class="fit-line"><b>体能匹配</b>${esc(fit.reasons.join(';'))}${esc(notes)}</p>`;
 }
@@ -927,7 +938,7 @@ async function planFromLibrary(trailId, regionId) {
 // 入门速览:把全程总量折算成日均口径,回答「一天走多少、要爬多少、最长多久没补给」。
 // 数据来自 GushanLib.quickfacts(纯函数,主进程同源),每项都带数字来源;warn 项标黄提醒。
 function quickFactsHtml(t) {
-  const facts = quickFacts(t);
+  const facts = quickFactsOf(t);
   if (!facts.length) return '';
   const items = facts.map((f) =>
     `<span class="qf${f.warn ? ' qf-warn' : ''}" title="${esc(f.why)}"><b>${esc(f.label)}</b>${esc(f.value)}</span>`
@@ -938,7 +949,7 @@ function quickFactsHtml(t) {
 // 装备清单预览:复用 lib/gear.js 的确定性推导(与生成行程时同一套实现,不手抄第二份)。
 // 此处不传天气上下文,只给「按线路字段必然要带」的项;生成行程后会带上天气推导的完整版。
 function gearPreviewHtml(t) {
-  const items = gearChecklist(t);
+  const items = gearChecklistOf(t);
   if (!items.length) return '';
   const shown = items.slice(0, 4).map((i) => esc(i.item)).join(' / ');
   const more = items.length > 4 ? ` <span class="muted">等 ${items.length} 项,生成行程后看完整清单</span>` : '';
@@ -953,7 +964,7 @@ function costLandPart(t, bd) {
 // 卡片的人均花费行,路线库与推荐结果共用。推荐结果已查到的火车价由 _transport 带入;
 // 路线库卡片展开后再按出发站补估(见 wireTransportLookups)。tp.note 是 12306 网络源,入 HTML 前过 esc
 function costLineHtml(t) {
-  const bd = costBreakdown(t, appCfg);
+  const bd = costBreakdownOf(t, appCfg);
   const landPart = costLandPart(t, bd);
   if (t._transport) {
     const tp = t._transport;
@@ -1011,18 +1022,23 @@ async function lookupTransport(line, origin, force) {
 function routeHtml(t) {
   const g = t._grade;
   const statusCls = { 开放: 'st-open', 部分管控: 'st-warn', 管控: 'st-warn', 禁入: 'st-bad', 关闭: 'st-bad' }[t.status];
-  // 数据测试保证评级与指标建议相差不超过一级;此提示是兜底,正常不出现
-  const gradeHint = Math.abs(t.grade - g.suggested) >= 2
+  // 数据测试保证评级与指标建议相差不超过一级;此提示是兜底,正常不出现。
+  // 指标数据不足时(grading 返回 usable:false)不给建议级,改说数据不足——
+  // 不能拿一个编出来的星级去和人工评级比,那会让兜底提示自己变成一句假话。
+  const gradeHint = g.usable && Math.abs(t.grade - g.suggested) >= 2
     ? `<p class="warn">评级校验:按量化指标建议为 ★${g.suggested}(${esc(g.label)}),请人工核对</p>` : '';
+  const gradeLine = g.usable
+    ? `<p class="muted">评级明细:强度 ${g.exertion} + 海拔 ${g.altitude} + 技术 ${g.technical}${g.load ? ` + 多日重装 ${g.load}` : ''} = ${g.total}(指标建议 ★${g.suggested})</p>`
+    : '<p class="warn">量化指标不完整(里程/爬升缺失或非法),无法给出评级建议——上方星级为人工评级,仅供参考</p>';
   const fit = bodyState?.matches?.[t.id];
-  const fitBadge = fit && FIT_LABELS[fit.level]
-    ? `<span class="fit-badge ft-${esc(fit.level)}" title="${esc(fit.reasons.join(';'))}">${FIT_LABELS[fit.level]}</span>` : '';
+  const fitBadge = fit && FIT_TEXT[fit.level]
+    ? `<span class="fit-badge ft-${esc(fit.level)}" title="${esc(fit.reasons.join(';'))}">${FIT_TEXT[fit.level]}</span>` : '';
   const mk = marks[t.id] || {};
   const markBadges = `${mk.wanted ? '<span class="fit-badge ft-want">想去</span>' : ''}
     ${mk.doneAt ? `<span class="fit-badge ft-done" title="走过记录">已走 ${esc(String(mk.doneAt).slice(5))}</span>` : ''}`;
   return `<details class="route">
     <summary><span class="route-title">${esc(t.name)}</span>
-      <span class="grade g${t.grade}">★${t.grade} ${GRADE_LABELS[t.grade] || ''}</span>${fitBadge}${markBadges}
+      <span class="grade g${t.grade}">★${t.grade} ${GRADE_TEXT[t.grade] || ''}</span>${fitBadge}${markBadges}
       <span class="status ${statusCls}">${esc(t.status)}</span>
       <span class="route-chev"><svg width="11" height="7" viewBox="0 0 12 8"><path d="M1 1.5 L6 6.5 L11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <span class="route-sub muted">${esc(t.province)} · ${esc(t.area)} · ${esc(t.type)}</span></summary>
@@ -1031,7 +1047,7 @@ function routeHtml(t) {
         <span>爬升 ${t.climbM}m</span><span>最高 ${t.maxAltM}m</span>${t.bestSeason ? `<span>${esc(t.bestSeason)}</span>` : ''}</div>
       <p>${esc(t.summary)}</p>
       ${t.statusNote ? `<p class="warn">${esc(t.statusNote)}</p>` : ''}
-      <p class="muted">评级明细:强度 ${g.exertion} + 海拔 ${g.altitude} + 技术 ${g.technical}${g.load ? ` + 多日重装 ${g.load}` : ''} = ${g.total}(指标建议 ★${g.suggested})</p>
+      ${gradeLine}
       ${fitLineHtml(fit)}
       ${gradeHint}
       ${quickFactsHtml(t)}
@@ -1060,7 +1076,7 @@ function initRecommend() {
   // chips 由词表生成,数字是路线库内可命中的条数,零命中的词不显示
   const counts = {};
   for (const t of libTrails) for (const s of t.scenery || []) counts[s] = (counts[s] || 0) + 1;
-  for (const tag of SCENERY) {
+  for (const tag of SCENERY_TAGS) {
     if (!counts[tag]) continue;
     const chip = document.createElement('button');
     chip.type = 'button';

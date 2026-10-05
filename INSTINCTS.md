@@ -55,3 +55,71 @@
 
 - 2026-10-04:electron-builder 的 `files: ["data/**"]` 会把 gitignore 掉的 config.json(高德 key)、
   trips/(个人行程)打进分发包。运行时私有文件必须在 build.files 里显式 `!` 排除,数据种子和隐私文件分开。
+
+## 渲染进程共享全局作用域:顶层重名会让整份脚本静默失效
+
+- 2026-10-06:独立盲评时发现 186 条线路只有 35 条带 `regionId`,`planner.pickTrail`
+  按 `regionId === regionId` 硬过滤,其余151 条在规划器里根本不存在。**但这不是最要紧的**——
+  用真实 Electron 起窗口实测控制台日志,才看到真正的元凶:
+  `Uncaught SyntaxError: Identifier 'api' has already been declared`,重复 5 次。
+- 根因:`lib/*.js` 经 `<script>` 加载(不是 ES module),每个文件尾部的 `const api = {...}`
+  全部落进同一个全局作用域。**6 个 lib 里有 5 个因为都叫 `api` 而整份不执行**,
+  只有 `seat.js` 侥幸排第一活了下来。紧接着 `src/app.js` 的 `const { pickSeat } = LIB.seat`
+  又与 `lib/seat.js` 的顶层 `function pickSeat` 撞名,app.js 整份挂掉。
+- 为什么一路逃过验证:主进程用 `require`,有独立模块作用域,完全正常;单测跑的也是 require 侧,
+  **压根碰不到渲染层的共享作用域**。只有真起一个窗口看控制台才暴露。
+  另一个坑:`app.js` 里 `LIB.tripMarkdown.tripToMarkdown(...)` 对应的 script 标签根本没写进 index.html,
+  不点「导出行程」永远不会炸。
+- 规矩(已落 `test/renderer-scope.test.mjs`,4 条断言):
+  1. lib 顶部导出对象名必须文件级唯一(`api_seat` / `api_grading` / …),不许都叫 `api`;
+  2. app.js 里从 `LIB.X` 取用的名字一律**加前缀解构**(`{ pickSeat: seatPick }`),
+     绝不能裸写 `{ pickSeat }` —— 它与 lib 的顶层函数同处一个作用域;
+  3. app.js 用到的每个 `LIB.X` 必须有对应的 `<script src="../lib/X.js">`;
+  4. 冲突检测必须同时抓**普通声明与解构声明**——初版只抓普通声明,
+     真实 Electron 实测里 app.js 仍报 `SCENERY` 冲突,补上解构形态才彻底。
+- 教训:**「主进程跑得好好的」不等于「渲染进程没坏」**。凡是用 `<script>` 而非 module 的代码,
+  顶层作用域是共享的,这类冲突必须靠静态断言 + 真机控制台日志两道验证。
+
+## NaN 会穿过所有阈值判断,静默落到最后一个 else
+
+- 2026-10-06:`grading.computeBreakdown` 里 `days: 'abc'` 算出 `exertion = NaN`,
+  于是 `NaN < 2.6` / `< 3.8` / `< 5.2` / `< 6.6` 全部为 false,直接落到最后的 `else` 得 **★5 极限**。
+  对入门者是方向性误导:本该被难度闸门挡掉的线,反而顶着最高难度出现在推荐里,还不带任何警告。
+- 反向的坑同样存在:第一版修复把脏值收成 0 继续算,`total=0` → **★1 休闲**。
+  换了方向照样是编答案——用户以为这是轻松线,点进去发现啥也没写。
+- 最终规矩:核心指标(`distanceKm`/`climbM`)缺失或非法时,`computeBreakdown` 返回
+  `usable: false` + `suggested: null` + `label: '数据不足'`,UI 改走
+  「量化指标不完整,上方星级为人工评级,仅供参考」——**明说不知道,不猜方向**。
+- 附带一条:`??` 与 `||` 在 `TECH_SCORE[trail.techLevel]` 处结果完全相同(`TECH_SCORE[0]` 本就是 0),
+  改 `||`→`??` 造不出任何可观测差异。写了条抓不住变异的断言,只会给人「这里有防线」的错觉——
+  **测试断言必须真的能红**,否则宁可删掉。
+
+## 区域归属不能按省份映射,必须按地理
+
+- 2026-10-06:9 个 `region` 是**具体自驾环线**(节点是成都-映秀-四姑娘山镇-丹巴…这类市镇),
+  不是省份概念。按 `province` 回填 `regionId` 会把贵州线路塞进「滇西北环线」,
+  生成一条从丽江出发根本开不过去的行程——而且静默,用户看不出来。
+- 正确判据是球面距离:线路 `start` 到各环线节点的 haversine 距离,取最近。
+  实测该方法与已有的 35 条人工标注 **35/35 完全一致**,判据可信。
+- 阈值 80km(自驾一天舒适半径)的来由是实测边界:≤30km 13 条、30-50km 4 条、50-80km 9 条
+  逐条核对全部地理正确;80-120km 起出现错配(峨眉山后山穿越在乐山、离川西环线 113km),
+  >120km 完全错(冈仁波齐转山离伊犁昭苏 1352km)。宁可少覆盖,不硬凑。
+- 另一条教训:离群检测最初用「同区域中位数的倍数」,被**级联反应**咬了——
+  剔除一条离群 → 中位数被拉低 → 下一条正常项立刻成新离群 → 再剔除,无限循环,
+  最后逼着人把阈值放到能放过真错配的尺度。绝对距离没有这个问题,直接对应现实语义。
+- 还有一条:人工标注**允许**超距。新疆伊犁环线在伊宁河谷,而夏特/孟克德在昭苏西南、
+  尼勒克东部山区,直线距离 82–158km,但都在伊犁州境内、与环线节点同县,标注是对的。
+  用 80km 去卡人工标注是否定正确的判断。跨省才是硬错误。
+
+## CSP 与窗口导航拦截
+
+- 2026-10-06:`src/index.html` 加了 CSP(`default-src 'none'` + 高德白名单),
+  `electron/main.js` 加了 `will-navigate` + `setWindowOpenHandler`。
+  实测确认 `loadFile` 不走 `will-navigate`(主进程主动加载不触发该事件),所以无需白名单,
+  应用能正常启动;导航到 `https://evil.example.com` 与本地 `package.json` 都被拦下,窗口原地不动。
+- CSP 里 `script-src` 必须含 `'unsafe-inline' 'unsafe-eval'` 与 `webapi.amap.com`——
+  高德 JS API 的硬要求,收不掉。若哪天要彻底去掉,唯一路径是换自托管瓦片渲染,代价远大于收益。
+  Electron 会因此打一条 `Insecure Content-Security-Policy` warning,属预期,不是配置失败。
+- 沙箱内实测 Electron 的两个必要条件:`app.disableHardwareAcceleration()` +
+  `app.commandLine.appendSwitch('in-process-gpu')`,否则 GPU 进程崩溃
+  (`exit_code=-1073741819`)导致 `loadFile` 直接 ERR_FAILED,看起来像代码写错了。

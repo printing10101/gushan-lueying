@@ -926,7 +926,9 @@
       10,
       11
     ],
-    "tickets": 0
+    "tickets": 0,
+    "regionId": "chuanxi",
+    "node": "康定"
   },
   "gongga-xinan": {
     "name": "贡嘎西南坡(子梅垭口—冷嘎措)",
@@ -962,7 +964,9 @@
       "子梅垭口 4500m+ 高反",
       "包车接驳段路况差"
     ],
-    "supplies": "上木居/贡嘎山镇有食宿,可包车大幅减负"
+    "supplies": "上木居/贡嘎山镇有食宿,可包车大幅减负",
+    "regionId": "chuanxi",
+    "node": "新都桥"
   },
   "lenggacuo": {
     "name": "冷噶措",
@@ -998,7 +1002,9 @@
       "海拔 4400m+ 高反",
       "日落时段山口风大温骤降"
     ],
-    "supplies": "玉龙西村有食宿,可骑马上山"
+    "supplies": "玉龙西村有食宿,可骑马上山",
+    "regionId": "chuanxi",
+    "node": "新都桥"
   },
   "luoke": {
     "name": "洛克线(木里—亚丁)",
@@ -1257,7 +1263,9 @@
       "碎石坡",
       "夜间低温"
     ],
-    "supplies": "无补给,全程重装"
+    "supplies": "无补给,全程重装",
+    "regionId": "chuanxi",
+    "node": "八美"
   },
   "majiagou": {
     "name": "玛嘉沟",
@@ -1286,7 +1294,9 @@
       10,
       11
     ],
-    "supplies": "景区栈道,门口有售卖,可住玛嘉沟村"
+    "supplies": "景区栈道,门口有售卖,可住玛嘉沟村",
+    "regionId": "chuanxi",
+    "node": "丹巴"
   },
   "sanao": {
     "name": "三奥雪山",
@@ -1460,7 +1470,9 @@
       "5588m 高反显著",
       "天气窗口难等"
     ],
-    "supplies": "上日乌且村有协作站,以雇向导协作为主"
+    "supplies": "上日乌且村有协作站,以雇向导协作为主",
+    "regionId": "chuanxi",
+    "node": "新都桥"
   },
   "niubeishan": {
     "name": "牛背山",
@@ -1498,7 +1510,9 @@
       "山顶风大温低",
       "雾天盘山路驾驶小心"
     ],
-    "supplies": "山顶有商铺住宿,价格偏高"
+    "supplies": "山顶有商铺住宿,价格偏高",
+    "regionId": "chuanxi",
+    "node": "泸定"
   },
   "emei-houshan": {
     "name": "峨眉山后山穿越(张沟—万佛顶)",
@@ -1603,7 +1617,9 @@
       10
     ],
     "tickets": 0,
-    "supplies": "日隆镇补给完善,营地需自给"
+    "supplies": "日隆镇补给完善,营地需自给",
+    "regionId": "chuanxi",
+    "node": "四姑娘山镇"
   },
   "moerduo": {
     "name": "墨尔多神山转山",
@@ -1640,7 +1656,9 @@
       "转山道长距离",
       "天气多变"
     ],
-    "supplies": "丹巴县城与沿线村寨可补给"
+    "supplies": "丹巴县城与沿线村寨可补给",
+    "regionId": "chuanxi",
+    "node": "丹巴"
   },
   "yubang": {
     "name": "雨崩(梅里内转)",
@@ -1719,7 +1737,9 @@
       "转经路全程长距离",
       "冬季严寒"
     ],
-    "supplies": "沿线村庄与茶馆可补给,需提前规划住宿点"
+    "supplies": "沿线村庄与茶馆可补给,需提前规划住宿点",
+    "regionId": "dianxibei",
+    "node": "飞来寺"
   },
   "meili-bei": {
     "name": "梅里北坡",
@@ -1875,7 +1895,9 @@
       "垭口冬季积雪",
       "长距离无补给"
     ],
-    "supplies": "无补给,全程重装"
+    "supplies": "无补给,全程重装",
+    "regionId": "dianxibei",
+    "node": "飞来寺"
   },
   "cangshan-shijiu": {
     "name": "苍山十九峰纵走",
@@ -2196,7 +2218,9 @@
       "天气多变",
       "部分路段荒废需轨迹"
     ],
-    "supplies": "雾里村/秋那桶有客栈,丙中洛镇补给完善"
+    "supplies": "雾里村/秋那桶有客栈,丙中洛镇补给完善",
+    "regionId": "dianxibei",
+    "node": "奔子栏"
   },
   "yuanyang-titian": {
     "name": "元阳梯田徒步(多依树—坝达)",
@@ -2559,7 +2583,9 @@
       "大雾迷路",
       "无人区救援困难"
     ],
-    "supplies": "无补给,全程重装自给(或雇马帮)"
+    "supplies": "无补给,全程重装自给(或雇马帮)",
+    "regionId": "qinling",
+    "node": "太白县"
   },
   "taibai-nanbei": {
     "name": "太白山南北穿越",
@@ -2676,7 +2702,9 @@
       "箭竹林易迷路",
       "天气多变"
     ],
-    "supplies": "自备水粮,分水岭补给"
+    "supplies": "自备水粮,分水岭补给",
+    "regionId": "qinling",
+    "node": "鄠邑"
   },
   "jiawutai": {
     "name": "嘉午台",
@@ -2700,7 +2728,9 @@
     "risks": [
       "崖壁段需手脚并用"
     ],
-    "supplies": "沿线有农家售卖,山脚补给"
+    "supplies": "沿线有农家售卖,山脚补给",
+    "regionId": "qinling",
+    "node": "鄠邑"
   },
   "qinchu-gudao": {
     "name": "秦楚古道(终南山)",
@@ -2736,7 +2766,9 @@
       "天气多变",
       "部分路段荒废需轨迹"
     ],
-    "supplies": "沿线有农家,营盘镇补给"
+    "supplies": "沿线有农家,营盘镇补给",
+    "regionId": "qinling",
+    "node": "鄠邑"
   },
   "bingjing": {
     "name": "冰晶顶",
@@ -2880,7 +2912,9 @@
       "墙体坍塌攀爬有风险,雨雪天禁上",
       "部分路段临近崖边"
     ],
-    "supplies": "老牛湾村食宿,沿线无售卖"
+    "supplies": "老牛湾村食宿,沿线无售卖",
+    "regionId": "jinbei",
+    "node": "朔州"
   },
   "hengshan-hou": {
     "name": "恒山后山穿越",
@@ -3227,7 +3261,9 @@
       "城墙骑脊段攀爬",
       "天气多变"
     ],
-    "supplies": "自备水粮,涞源县补给"
+    "supplies": "自备水粮,涞源县补给",
+    "regionId": "jingxi",
+    "node": "蔚县"
   },
   "wulingshan": {
     "name": "雾灵山",
@@ -3335,7 +3371,9 @@
       "丹霞岩壁风化落石",
       "崖顶无遮蔽"
     ],
-    "supplies": "自备水粮,后城镇补给"
+    "supplies": "自备水粮,后城镇补给",
+    "regionId": "jingxi",
+    "node": "怀来"
   },
   "jiankou": {
     "name": "箭扣长城(西栅子—慕田峪)",
@@ -3372,7 +3410,9 @@
       10,
       11
     ],
-    "supplies": "自备水粮,西栅子村农家补给"
+    "supplies": "自备水粮,西栅子村农家补给",
+    "regionId": "jingxi",
+    "node": "北京"
   },
   "huangcaoliang": {
     "name": "黄草梁—七座楼长城",
@@ -3480,7 +3520,9 @@
       "管控区域,行前确认通行政策",
       "鞍部风大"
     ],
-    "supplies": "自备水粮,周边村镇补给"
+    "supplies": "自备水粮,周边村镇补给",
+    "regionId": "jingxi",
+    "node": "怀来"
   },
   "xiangbala": {
     "name": "香八拉(香山—八大处)",
@@ -3503,7 +3545,9 @@
       "lat": 40
     },
     "summary": "北京驴友的入门暗号,香山到八大处的西山拉练,地铁可达的一条'街'路",
-    "supplies": "市区可达,自备水粮"
+    "supplies": "市区可达,自备水粮",
+    "regionId": "jingxi",
+    "node": "北京"
   },
   "sanfeng-huan": {
     "name": "大觉寺—阳台山—鹫峰三峰环穿",
@@ -3526,7 +3570,9 @@
       "lat": 40.05
     },
     "summary": "北京最经典的越野拉练线,1200m爬升18km,周末西山最热闹的一条山脊",
-    "supplies": "阳台山/鹫峰有售卖,自备水粮即可"
+    "supplies": "阳台山/鹫峰有售卖,自备水粮即可",
+    "regionId": "jingxi",
+    "node": "北京"
   },
   "baihuashan": {
     "name": "百花山—白草畔",
@@ -3560,7 +3606,9 @@
       "天气多变",
       "山脊风大"
     ],
-    "supplies": "景区有售卖,两端补给"
+    "supplies": "景区有售卖,两端补给",
+    "regionId": "jingxi",
+    "node": "斋堂"
   },
   "yunmengshan": {
     "name": "云蒙山—天仙瀑",
@@ -3597,7 +3645,9 @@
       "瀑布峡谷湿滑",
       "密林岔路"
     ],
-    "supplies": "自备水粮,密云端补给"
+    "supplies": "自备水粮,密云端补给",
+    "regionId": "jingxi",
+    "node": "北京"
   },
   "huangyaguan": {
     "name": "黄崖关长城穿越",

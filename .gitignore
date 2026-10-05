@@ -10,3 +10,7 @@ scripts/smoke-output.txt
 test/preview.html
 .mimosa/
 .zcode/
+# 工具工作目录(基准快照/临时脚本/会话记忆),不属于源码
+.workbuddy/
+# 生成物:由 node scripts/gen-shortcut-ps.mjs 产出,不入库
+scripts/make-shortcut.ps1

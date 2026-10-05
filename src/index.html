@@ -3,6 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <title>孤山掠影</title>
+  <!-- CSP:渲染进程只做 UI,所有业务出网都在主进程(net.fetch),所以这里只需为
+       「本地文件 + 高德 JS API 地图」开洞。收紧的价值在于——即便渲染层被注入任意脚本,
+       它也连不到 api.open-meteo.com / restapi.amap.com / kyfw.12306.cn(那些在主进程),
+       外泄不了行程与坐标,也无法把 data/*.json 里的配置外传。
+       注意:高德 JS API 会动态拉瓦片/图标/字体,且需要 inline/eval 能力,故 script-src
+       含 'unsafe-inline' 'unsafe-eval' 与 webapi.amap.com;这是 map API 的硬要求,
+       收不掉。若哪天要彻底去掉,唯一路径是换自托管瓦片渲染,代价远大于收益。 -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webapi.amap.com https://*.amap.com;
+    style-src 'self' 'unsafe-inline' https://webapi.amap.com https://*.amap.com;
+    img-src 'self' data: blob: https://*.amap.com https://amap.com;
+    font-src 'self' data: https://*.amap.com;
+    connect-src 'self' https://webapi.amap.com https://*.amap.com;
+    form-action 'none';
+    base-uri 'none';
+    object-src 'none';
+    frame-src 'none';
+    child-src 'none'">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -351,6 +370,9 @@
   <script src="../lib/gear.js"></script>
   <script src="../lib/quickfacts.js"></script>
   <script src="../lib/fitness.js"></script>
+  <!-- trip-markdown 必须在 app.js 之前:导出行程走 LIB.tripMarkdown.tripToMarkdown,
+       漏了这个标签要等用户点「导出」才炸(undefined 读属性),不点测不出来 -->
+  <script src="../lib/trip-markdown.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

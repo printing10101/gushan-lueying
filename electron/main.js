@@ -29,6 +29,21 @@ function createWindow() {
       contextIsolation: true,
     },
   });
+  // CSP 与 contextIsolation 是两道纵深防御,都不能替代这一道:只要渲染层可导航,
+  // 一个注入的 <a href> 或 window.location 就能把整个窗口变成任意网页的执行环境,
+  // 而 preload 注入的 window.gushan 仍在那儿——IPC 白名单会被直接暴露给那个页面。
+  // 应用是纯本地单页,除了自己的 index.html 没有任何需要导航到的页面,全部拒绝。
+  win.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    console.error(`已阻止窗口导航到 ${url}`);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // 外链一律交给 shell 打开系统浏览器,而不是在应用内开新窗口。
+    // 这里不复用 shell:openExternal 的 https 白名单判断,因为该 handler 只接受
+    // IPC 传来的字符串;这里要挡的是渲染层自己发起的 window.open。
+    if (/^https:\/\/.+/.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
   win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
 }
 
