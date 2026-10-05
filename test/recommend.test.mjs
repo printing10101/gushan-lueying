@@ -23,6 +23,49 @@ test('人均花费估算:口径透明可复算(房费均摊 + 餐标 + 门票)',
   assert.equal(costPerPerson({ days: 2 }, {}), 1 * 200 / 2 + 2 * 80);
 });
 
+test('一日线住宿按 1 晚计(不再算 0 晚)', () => {
+  // 1 天线人在景区附近过夜是实打实开支,算 0 晚会让入门者最常选的当日线系统性低估
+  const bd = costBreakdown({ days: 1 }, CFG);
+  assert.equal(bd.lodging, 200 / 2);
+  assert.equal(bd.total, 200 / 2 + 80);
+  // 多日线仍是 days-1 晚,口径不因这次修正而改动
+  assert.equal(costBreakdown({ days: 7 }, CFG).lodging, 6 * 200 / 2);
+  assert.equal(costBreakdown({ days: 3 }, CFG).lodging, 2 * 200 / 2);
+  assert.equal(costBreakdown({ days: 2 }, CFG).lodging, 1 * 200 / 2);
+});
+
+test('门票未标注时 ticketsUnknown 为 true,不静默按 0', () => {
+  assert.equal(costBreakdown({ days: 2 }, CFG).ticketsUnknown, true);
+  assert.equal(costBreakdown({ days: 2, tickets: 0 }, CFG).ticketsUnknown, false);
+  assert.equal(costBreakdown({ days: 2, tickets: 60 }, CFG).ticketsUnknown, false);
+  // 未标注仍按 0 参与求和(不编造金额),但必须带标记让 UI 能言明
+  assert.equal(costBreakdown({ days: 2 }, CFG).total, 100 + 160);
+});
+
+test('难度是硬闸门:gradeMax/gradeMin 之外一律不推', () => {
+  const t = (g) => trail({ grade: g, scenery: ['雪山'] });
+  assert.equal(scoreTrail(t(5), { gradeMax: 2 }, {}), null);
+  assert.equal(scoreTrail(t(3), { gradeMax: 2 }, {}), null);
+  assert.ok(scoreTrail(t(2), { gradeMax: 2 }, {}));
+  assert.ok(scoreTrail(t(1), { gradeMax: 2 }, {}));
+  assert.equal(scoreTrail(t(1), { gradeMin: 3 }, {}), null);
+  assert.ok(scoreTrail(t(3), { gradeMin: 3 }, {}));
+  // 缺省不传 = 不设限,接入前的老调用行为不变
+  assert.ok(scoreTrail(t(5), {}, {}));
+  assert.ok(scoreTrail(t(5), { gradeMin: null, gradeMax: null }, {}));
+});
+
+test('难度闸门优先于景色:★5 长线不能只因命中景色就混进入门候选', () => {
+  const trails = {
+    easy: { name: '轻松线', days: 1, grade: 1, status: '开放', scenery: ['雪山'] },
+    hard: { name: '极限线', days: 7, grade: 5, status: '开放', scenery: ['雪山'] },
+  };
+  const gated = rank({ scenery: ['雪山'], gradeMax: 2, limit: 10 }, trails, CFG);
+  assert.deepEqual(gated.map((r) => r.id), ['easy']);
+  // 不设限时两条都在(与接入前一致)
+  assert.equal(rank({ scenery: ['雪山'], limit: 10 }, trails, CFG).length, 2);
+});
+
 test('硬条件:禁入/关闭一律不推,超天数上限不推,管控不排除', () => {
   assert.equal(scoreTrail(trail({ status: '禁入' }), {}, {}), null);
   assert.equal(scoreTrail(trail({ status: '关闭' }), {}, {}), null);
@@ -94,9 +137,12 @@ test('rank:province 硬过滤,excludeIds 剔除走过的', () => {
 test('costBreakdown:分项与总额一致,门票未标按 0', () => {
   // 7 天:6 晚 × ¥200 ÷ 2 人 + 7 天 × ¥80 + 门票 ¥60
   assert.deepEqual(costBreakdown({ days: 7, tickets: 60 }, CFG),
-    { lodging: 600, food: 560, tickets: 60, total: 1220 });
+    { lodging: 600, food: 560, tickets: 60, ticketsUnknown: false, total: 1220 });
   assert.deepEqual(costBreakdown({ days: 3 }, CFG),
-    { lodging: 200, food: 240, tickets: 0, total: 440 });
+    { lodging: 200, food: 240, tickets: 0, ticketsUnknown: true, total: 440 });
+  // 分项之和恒等于总额(新字段 ticketsUnknown 不参与求和,只是给 UI 的标记)
+  const bd = costBreakdown({ days: 1, tickets: 55 }, CFG);
+  assert.equal(bd.lodging + bd.food + bd.tickets, bd.total);
 });
 
 test('enrichWithTransport:estAll 含往返火车,超预算改按含交通口径重算', async () => {

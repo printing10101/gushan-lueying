@@ -7,7 +7,8 @@ const LIB = window.GushanLib;
 const { pickSeat } = LIB.seat;
 const { costBreakdown, SCENERY } = LIB.recommend;
 const GRADE_LABELS = LIB.grading.GRADE_LABELS;
-const { summitTemp } = LIB.gear;
+const { summitTemp, gearChecklist } = LIB.gear;
+const { quickFacts } = LIB.quickfacts;
 const { FIT_LABELS, ADVICE_LABELS } = LIB.fitness;
 
 // HTML 转义:数据(手编 JSON/网络返回/存档/报错原文)不该在页面上长成标签或逃出属性
@@ -923,6 +924,27 @@ async function planFromLibrary(trailId, regionId) {
   await refreshTrailOptions(regionId, trailId);
 }
 
+// 入门速览:把全程总量折算成日均口径,回答「一天走多少、要爬多少、最长多久没补给」。
+// 数据来自 GushanLib.quickfacts(纯函数,主进程同源),每项都带数字来源;warn 项标黄提醒。
+function quickFactsHtml(t) {
+  const facts = quickFacts(t);
+  if (!facts.length) return '';
+  const items = facts.map((f) =>
+    `<span class="qf${f.warn ? ' qf-warn' : ''}" title="${esc(f.why)}"><b>${esc(f.label)}</b>${esc(f.value)}</span>`
+  ).join('');
+  return `<p class="qf-row">${items}</p>`;
+}
+
+// 装备清单预览:复用 lib/gear.js 的确定性推导(与生成行程时同一套实现,不手抄第二份)。
+// 此处不传天气上下文,只给「按线路字段必然要带」的项;生成行程后会带上天气推导的完整版。
+function gearPreviewHtml(t) {
+  const items = gearChecklist(t);
+  if (!items.length) return '';
+  const shown = items.slice(0, 4).map((i) => esc(i.item)).join(' / ');
+  const more = items.length > 4 ? ` <span class="muted">等 ${items.length} 项,生成行程后看完整清单</span>` : '';
+  return `<p class="muted gear-preview"><b>行前要带:</b>${shown}${more}</p>`;
+}
+
 // 落地明细段:住宿+餐饮+门票,口径来自 GushanLib.recommend.costBreakdown
 function costLandPart(t, bd) {
   return `住宿 ¥${bd.lodging} + 餐饮 ¥${bd.food} + ${t.tickets == null ? '门票未标按 0' : `门票 ¥${bd.tickets}`} = 落地 ¥${bd.total}`;
@@ -1012,8 +1034,10 @@ function routeHtml(t) {
       <p class="muted">评级明细:强度 ${g.exertion} + 海拔 ${g.altitude} + 技术 ${g.technical}${g.load ? ` + 多日重装 ${g.load}` : ''} = ${g.total}(指标建议 ★${g.suggested})</p>
       ${fitLineHtml(fit)}
       ${gradeHint}
+      ${quickFactsHtml(t)}
       ${t.risks ? `<p><b>风险:</b>${t.risks.map(esc).join(' / ')}</p>` : ''}
       ${t.supplies ? `<p><b>补给:</b>${esc(t.supplies)}</p>` : ''}
+      ${gearPreviewHtml(t)}
       ${costLineHtml(t)}
       <p class="mark-ops">
         <button class="mark-btn${mk.wanted ? ' on' : ''}" data-want="${t.id}">${mk.wanted ? '★ 已在想去' : '☆ 想去'}</button>
@@ -1056,6 +1080,13 @@ function initRecommend() {
     $('rec-province').append(new Option(p, p));
   }
   $('rec-go').onclick = runRecommend;
+  // 难度是「门槛」不是「偏好」:改了即刻重算,不要求用户再点一次「帮我推荐」。
+  // 只在已经推荐过、或已填了条件时才自动跑,避免刚进页面就发请求。
+  $('rec-grade').addEventListener('change', () => {
+    const hasCriteria = toPositive($('rec-budget').value) !== null
+      || recSelected.size > 0 || $('rec-province').value || $('rec-origin').value.trim();
+    if (hasCriteria) runRecommend();
+  });
   for (const id of ['rec-budget', 'rec-days', 'rec-origin']) {
     $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') runRecommend(); });
   }
@@ -1063,6 +1094,7 @@ function initRecommend() {
   try {
     const saved = JSON.parse(localStorage.getItem(FORM_KEY) || 'null');
     if (saved?.origin) $('rec-origin').value = saved.origin;
+    if (saved?.recGrade) $('rec-grade').value = String(saved.recGrade);
   } catch { /* 记忆坏了当没填 */ }
   wireStationInput($('rec-origin'), $('rec-station-list'));
 }
@@ -1074,11 +1106,13 @@ async function runRecommend() {
   const scenery = [...recSelected];
   const province = $('rec-province').value;
   const originStation = $('rec-origin').value.trim();
+  // 难度闸门:留空 = null,交给主进程按体能自动收窄;显式选档则以此为准(手选优先)
+  const gradeMax = toPositive($('rec-grade').value);
   if (budget === null && !scenery.length && !province && !originStation) {
     $('rec-msg').textContent = '填一个人均预算或出发站,点几个想看的景色,或限定省份,至少给一个方向';
     return;
   }
-  const input = { budget, maxDays, scenery, province, originStation };
+  const input = { budget, maxDays, scenery, province, originStation, gradeMax };
   lastRecInput = input;
   if (originStation) $('rec-msg').textContent = '正在按出发站估算往返火车实价…(每个枢纽只查一次,首条推荐稍慢)';
   $('rec-go').disabled = true; // 推荐期间禁点:连点会对 12306 并发两轮估算
@@ -1090,6 +1124,12 @@ async function runRecommend() {
     $('rec-msg').textContent = `推荐失败:${e.message}`;
   } finally {
     $('rec-go').disabled = false;
+    // 难度档位记住:下次进来还是同一档,不用重新选
+    try {
+      const saved = JSON.parse(localStorage.getItem(FORM_KEY) || 'null') || {};
+      saved.recGrade = $('rec-grade').value;
+      localStorage.setItem(FORM_KEY, JSON.stringify(saved));
+    } catch { /* 记忆写不进去不影响推荐 */ }
   }
 }
 
@@ -1099,22 +1139,29 @@ function toPositive(v) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function criteriaText({ budget, maxDays, scenery, province }) {
+function criteriaText({ budget, maxDays, scenery, province, gradeMax }, gate = null) {
   const parts = [];
   if (scenery.length) parts.push(`景色「${scenery.join('、')}」`);
   if (province) parts.push(`限 ${province}`);
   if (budget) parts.push(`人均预算 ¥${budget}`);
   if (maxDays) parts.push(`≤${maxDays} 天`);
+  // 难度闸门:显式选的写「★N 以内」;自动收窄的写清是体能给的,让用户知道结果为什么变少
+  if (Number.isFinite(gradeMax)) parts.push(`★${gradeMax} 以内`);
+  else if (gate?.auto && Number.isFinite(gate.gradeMax)) parts.push(`体能上限★${gate.gradeMax} 以内`);
   return parts.join(' + ');
 }
 
 function renderRecommend(list, input) {
+  const gate = list.__gate || null;
   const caliber = input.originStation
     ? '花费含往返火车实价估算(去程价×2)+ 吃住门票'
     : '花费是吃住+门票的落地估算,未含往返大交通';
+  const gateNote = gate?.auto && Number.isFinite(gate.gradeMax)
+    ? ` · 已按 ${gate.bodyHint || '体能'}自动排除更高难度`
+    : '';
   $('rec-count').textContent = list.length
-    ? `按 ${criteriaText(input)} 推荐 ${list.length} 条 · 走过的已排除 · ${caliber}`
-    : `按 ${criteriaText(input)} 没有匹配的线路,放宽预算或天数再试`;
+    ? `按 ${criteriaText(input, gate)} 推荐 ${list.length} 条 · 走过的已排除 · ${caliber}${gateNote}`
+    : `按 ${criteriaText(input, gate)} 没有匹配的线路,放宽预算/天数或难度上限再试`;
   $('rec-list').innerHTML = list.map((r, i) => recCardHtml(r, i, input)).join('');
   wirePlanButtons($('rec-list'));
   wireMarkButtons($('rec-list'));
@@ -1131,8 +1178,15 @@ function recCardHtml(r, i, input) {
       : '<span class="status st-open">预算内</span>')
     : '';
   const hits = r.hits.length ? `<span class="rec-hit">景色命中:${esc(r.hits.join('、'))}</span>` : '';
+  // 门票未标注要显式挂出来:costBreakdown 按 0 计,不说就等于默默低估预算
+  const tk = t.tickets == null
+    ? `<span class="status st-bad" title="线路库未标注门票数据，此处按 0 元计，实际花费更高">门票未标注</span>` : '';
+  // 规划器未覆盖:不能一键生成行程,但路线本身仍然可选——说清原因,不静默没按钮
+  const noPlan = (t.regionId && t.node)
+    ? ''
+    : `<span class="status st-open" title="线路库未标注所属环线区域，无法自动串进行程规划；仍可参考下方逐日安排自行安排交通">需自行前往</span>`;
   return `<div class="rec">
-    <div class="rec-why"><span class="rec-rank">荐 ${i + 1}</span>${hits}${fit}
+    <div class="rec-why"><span class="rec-rank">荐 ${i + 1}</span>${hits}${tk}${noPlan}${fit}
       <span class="rec-est">预计人均 ¥${est}<i>(${r.transport ? '含往返火车' : '未含大交通'})</i></span></div>
     ${routeHtml({ ...t, id: r.id, _transport: r.transport })}
   </div>`;

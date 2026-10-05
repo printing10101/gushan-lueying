@@ -689,6 +689,27 @@ details.evidence pre {
   color: var(--ink-dim);
 }
 
+/* 入门速览:日均里程/爬升/海拔/补给,折算成"一天要面对多少"。
+   warn 项用琥珀色描边——量级到了该留意的程度,但不该红到像报错 */
+.qf-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.qf {
+  background: rgba(169, 204, 227, 0.06);
+  border: 1px solid rgba(169, 204, 227, 0.12);
+  border-radius: var(--glacier-radius, 8px);
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.qf b { color: var(--ink-faint); font-weight: normal; margin-right: 6px; }
+.qf-warn {
+  background: rgba(224, 168, 83, 0.1);
+  border-color: rgba(224, 168, 83, 0.34);
+  color: #e8c88a;
+}
+.qf-warn b { color: rgba(232, 200, 138, 0.72); }
+.gear-preview { font-size: 12px; margin: 8px 0; }
+.gear-preview b { color: var(--ink-faint); font-weight: normal; }
+
 /* 难度五星徽章 */
 .grade {
   font-size: 12px;

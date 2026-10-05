@@ -17,6 +17,20 @@ test('路线库规模:全国覆盖不应缩水', () => {
   assert.ok(provinces.size >= 25, `现有 ${provinces.size} 个省级区域,应不少于 25 个`);
 });
 
+// 同名条目会让路线库/推荐页渲染出两张无法区分的卡片,且两份数据常互相矛盾
+// (实测「珠峰东坡·嘎玛沟」曾有 11 天/100km 与 9 天/90km 两版并存),必须挡住。
+test('线路名唯一:不得有同名条目', () => {
+  const byName = new Map();
+  for (const [id, t] of Object.entries(trails)) {
+    const list = byName.get(t.name) || [];
+    list.push(id);
+    byName.set(t.name, list);
+  }
+  const dups = [...byName.entries()].filter(([, ids]) => ids.length > 1);
+  assert.equal(dups.length, 0,
+    `以下线路名重复: ${dups.map(([n, ids]) => `${n} → ${ids.join(', ')}`).join('; ')}`);
+});
+
 test('全量校验:必填字段 / 词汇表 / 坐标 / 评级与指标建议相差不超一级', () => {
   for (const [id, t] of Object.entries(trails)) {
     for (const key of ['name', 'province', 'area', 'type', 'days', 'distanceKm', 'climbM', 'maxAltM', 'grade', 'status', 'start', 'summary']) {

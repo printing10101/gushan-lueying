@@ -283,6 +283,13 @@
         <input id="rec-days" type="number" min="1" max="30" placeholder="最多天数(可留空)" aria-label="最多天数">
         <input id="rec-origin" list="rec-station-list" placeholder="出发站(估往返火车,可留空)" aria-label="出发车站">
         <datalist id="rec-station-list"></datalist>
+        <select id="rec-grade" aria-label="难度上限">
+          <option value="">难度不限</option>
+          <option value="1">★1 休闲栈道</option>
+          <option value="2">★2 入门级</option>
+          <option value="3">★3 进阶</option>
+          <option value="4">★4 高难</option>
+        </select>
         <select id="rec-province" aria-label="限定省份"><option value="">全部省份</option></select>
         <button id="rec-go">帮我推荐</button>
       </div>
@@ -342,6 +349,7 @@
   <script src="../lib/recommend.js"></script>
   <script src="../lib/grading.js"></script>
   <script src="../lib/gear.js"></script>
+  <script src="../lib/quickfacts.js"></script>
   <script src="../lib/fitness.js"></script>
   <script src="app.js"></script>
 </body>

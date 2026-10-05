@@ -16,6 +16,7 @@ const planner = require('../lib/planner');
 const grading = require('../lib/grading');
 const recommend = require('../lib/recommend');
 const runos = require('../lib/runos');
+const fitness = require('../lib/fitness');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -73,20 +74,47 @@ ipcMain.handle('trails:recommend', wrap(async (input) => {
   const marks = store.read('marks') || {};
   const doneIds = Object.entries(marks).filter(([, m]) => m?.doneAt).map(([id]) => id);
   const regions = store.read('regions') || {};
-  // 区域基准(region.stay)并进口径,落地估算即按区域区分
   const cfg = { ...(store.read('config') || {}), regionStay: recommend.regionStayMap(regions) };
-  const list = recommend.rank({ excludeIds: doneIds, ...(input || {}), limit: 30 },
-    readData('trails') || {}, cfg);
-  if (!input?.originStation) return list;
+
+  // 体能上限做默认难度闸门:RunOS 有数据就自动收窄到「当前能驾驭的难度」,取不到就不设限
+  // (fetchBodyState 自带 10 分钟缓存,未启动时返回 dataReady:false 而非抛错,不影响推荐)。
+  // 用户在表单里显式选了难度档时以选择为准,不覆盖——手选优先于自动。
+  let ableCap = null;
+  let bodyHint = null;
+  try {
+    const bodyState = await runos.fetchBodyState(store.read('config') || {}, {});
+    if (bodyState?.dataReady) {
+      ableCap = fitness.ableGrade(bodyState);
+      bodyHint = ableCap == null ? null : `体能上限★${ableCap}`;
+    }
+  } catch { /* 联动失败不挡推荐,退化为不设难度上限 */ }
+
+  const picked = input || {};
+  const gradeMin = Number.isFinite(picked.gradeMin) ? picked.gradeMin : null;
+  const gradeMax = Number.isFinite(picked.gradeMax)
+    ? picked.gradeMax
+    : (picked.useFitness === false ? null : ableCap);
+
+  const list = recommend.rank({
+    excludeIds: doneIds, gradeMin, gradeMax,
+    ...picked,
+    limit: 30,
+  }, readData('trails') || {}, cfg);
+  if (!picked.originStation) return withHint(list, gradeMax, bodyHint, picked);
   const enriched = await recommend.enrichWithTransport(list, {
-    originStation: input.originStation,
+    originStation: picked.originStation,
     regions,
-    budget: input.budget || null,
-    scenery: input.scenery || [],
+    budget: picked.budget || null,
+    scenery: picked.scenery || [],
     estimate: rail.estimateRoundTrip,
   });
-  return enriched.slice(0, 12);
+  return withHint(enriched.slice(0, 12), gradeMax, bodyHint, picked);
 }));
+
+// 难度闸门口径回传给渲染层:让卡片明说「按体能收窄到★N」而不是让用户猜结果为什么变少了
+function withHint(list, gradeMax, bodyHint, input) {
+  return Object.assign(list, { __gate: { gradeMax, bodyHint, auto: !Number.isFinite(input?.gradeMax) } });
+}
 // 线路库卡片展开时按需估算该线所属区域枢纽的往返火车;没接规划/出发站即枢纽的返回 null。
 // 带上枢纽坐标:无直达车时 rail12306 会按距离挑中转枢纽估两段价。
 // 严格版:查询失败抛错转 { error },与「确认无车」(null)区分,渲染端给重试;

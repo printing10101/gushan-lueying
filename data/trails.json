@@ -464,42 +464,6 @@
     ],
     "tickets": 0
   },
-  "gamagou": {
-    "name": "珠峰东坡·嘎玛沟",
-    "province": "西藏",
-    "area": "日喀则·定日曲当乡",
-    "type": "长线重装",
-    "scenery": [
-      "雪山"
-    ],
-    "days": 11,
-    "distanceKm": 100,
-    "climbM": 6000,
-    "maxAltM": 5344,
-    "techLevel": 1,
-    "grade": 5,
-    "bestSeason": "4-6月、9-10月",
-    "status": "管控",
-    "statusNote": "属珠峰自然保护区,需办理手续并持边防证",
-    "start": {
-      "lng": 87.2,
-      "lat": 28
-    },
-    "summary": "世界级雪山观景长线,珠峰、洛子、马卡鲁一字排开,郎玛拉垭口5344m",
-    "risks": [
-      "高反",
-      "落石",
-      "天气窗口短"
-    ],
-    "supplies": "无补给,需马帮支持",
-    "bestMonths": [
-      4,
-      5,
-      6,
-      9,
-      10
-    ]
-  },
   "xixiabangma": {
     "name": "希夏邦马大环线",
     "province": "西藏",
@@ -737,6 +701,7 @@
     "grade": 5,
     "bestSeason": "4-5月、9-10月",
     "status": "开放",
+    "statusNote": "属珠峰自然保护区,需办理手续并持边防证",
     "start": {
       "lng": 86.85,
       "lat": 27.93
