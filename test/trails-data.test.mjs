@@ -86,10 +86,25 @@ function distanceKm(a, b) {
   return 2 * EARTH_R * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
+// 判据只有一条:**就近**。曾经试过「同省优先」,被两条真实数据否掉了:
+//   · 浙西三尖(起点 119.15,30.25)距浙江临安 55km、距安徽绩溪 43km;
+//   · 清凉峰南山脊(area 写明「杭州·临安—安徽绩溪」,本来就走绩溪一侧山脊)
+//     距绩溪 10km、距临安 85km。
+// 强制同省会把这两条推去更远的地方,判据反而制造「开过去更远」的行程。
+// 环线跨市界、跨省界是合法的(南太行/河南收山西的王莽岭,距该环线 14km),
+// 真正的错只在于「离哪个环线都远」。
+//
+// 唯一单独处理的是跨境(港澳台):内地车不能自驾跨境,它们不该挂进任何区域。
+const CROSS_BORDER_PROVINCES = new Set(['香港', '澳门', '台湾']);
+
 test('已标注 regionId 的线路,起点地理上确实靠近该环线(防手工填错)', () => {
   const offenders = [];
   for (const [id, t] of Object.entries(trails)) {
     if (!t.regionId) continue;
+    if (CROSS_BORDER_PROVINCES.has(t.province)) {
+      offenders.push(`${t.name}属${t.province},内地车无法自驾跨境,不应挂进 ${t.regionId}`);
+      continue;
+    }
     let best = null;
     for (const [regionId, region] of Object.entries(regions)) {
       for (const node of region.loop || []) {
@@ -130,4 +145,38 @@ test('已标注 regionId 的线路:超距可以接受,但不得跨省', () => {
   }
   assert.equal(problems.length, 0,
     `以下线路跨省却挂到外省环线上,会产生到不了的行程:\n   ${problems.join('\n   ')}`);
+});
+
+// 区域结构本身也要校验。新增区域时最容易犯的错:
+//   · loop 不闭合 —— planner 按 loop[i]→loop[i+1] 生成 leg,首尾不重合就没有返程;
+//   · hub.railStation 写成复合值 —— 它会被原样丢进 12306 查站名,「广州南/广州站」
+//     这种斜杠写法必然查不到(实测冒烟直接抛「找不到 12306 车站」)。
+//     要表达「有两个站」应该写在 notes 里,railStation 只放 planner 真正用来查的那个。
+//   · loop 节点重名重复 —— planDays 用 legs[i].to === trail.node 定位徒步日,
+//     出现重复节点会让匹配歧义。
+test('区域结构:环线闭合 / 铁路站是单一站名 / 节点不重复', () => {
+  const problems = [];
+  for (const [id, region] of Object.entries(regions)) {
+    const loop = region.loop || [];
+    const first = loop[0];
+    const last = loop[loop.length - 1];
+    if (!first || first.name !== last.name || first.lng !== last.lng || first.lat !== last.lat) {
+      problems.push(`${id} 环线未闭合:首节点 ${first && first.name} ≠ 末节点 ${last && last.name}(planner 无返程 leg)`);
+    }
+    const station = region.hub && region.hub.railStation;
+    if (!station) problems.push(`${id} 缺 hub.railStation`);
+    else if (/[/、,，;；|]/.test(station)) {
+      problems.push(`${id} 的 hub.railStation 是复合值「${station}」,会被原样丢进 12306 查站名,必然查不到;只放单个站名,其余写进 notes`);
+    }
+    // 中间节点重名(首尾同名的闭合点除外)
+    const mid = loop.slice(1, -1).map((n) => n.name);
+    const dup = mid.filter((n, i) => mid.indexOf(n) !== i);
+    if (dup.length) problems.push(`${id} 环线中间节点重名:${[...new Set(dup)].join('、')}(planDays 按节点名定位徒步日会歧义)`);
+    for (const n of loop) {
+      if (!Number.isFinite(n.lng) || !Number.isFinite(n.lat)) {
+        problems.push(`${id} 节点「${n.name}」坐标非法`);
+      }
+    }
+  }
+  assert.equal(problems.length, 0, `区域结构有问题:\n   ${problems.join('\n   ')}`);
 });

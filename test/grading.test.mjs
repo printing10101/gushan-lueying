@@ -101,3 +101,33 @@ test('techLevel 非法档位(99/null)不产生 NaN', () => {
     assert.ok(Number.isFinite(r.total), `techLevel=${String(techLevel)} 产出了非有限 total`);
   }
 });
+
+test('海拔分段正确,脏值不产出 NaN', () => {
+  // 真正有牙齿的部分:分段边界。海拔分是按 3000/4000/4500/5000 四档切的,
+  // 边界写错(比如 >= 写成 >)会让 5000m 雪山掉到 3 分,把高反硬伤当成中等风险。
+  const base = { days: 3, distanceKm: 50, climbM: 1000, techLevel: 0 };
+  assert.equal(computeBreakdown({ ...base, maxAltM: 5000 }).altitude, 4);
+  assert.equal(computeBreakdown({ ...base, maxAltM: 4999 }).altitude, 3);
+  assert.equal(computeBreakdown({ ...base, maxAltM: 4500 }).altitude, 3);
+  assert.equal(computeBreakdown({ ...base, maxAltM: 4499 }).altitude, 2);
+  assert.equal(computeBreakdown({ ...base, maxAltM: 4000 }).altitude, 2);
+  assert.equal(computeBreakdown({ ...base, maxAltM: 3999 }).altitude, 1);
+  assert.equal(computeBreakdown({ ...base, maxAltM: 3000 }).altitude, 1);
+  assert.equal(computeBreakdown({ ...base, maxAltM: 2999 }).altitude, 0);
+
+  // 脏值:断言只到「不产出 NaN」为止。
+  // 「脏值应判 0 分海拔」这条**抓不住变异**——裸写阈值比较时,null/字符串/负数
+  // 同样全部返回 false 落到 return 0,结果一模一样。写它只会制造假防线。
+  // 0 分在这里是正确的:数据缺失时不该凭空给高反加分。
+  for (const maxAltM of [undefined, null, 'abc', '5000', -9999, {}, []]) {
+    const r = computeBreakdown({ ...base, maxAltM });
+    assert.ok(Number.isFinite(r.altitude), `maxAltM=${String(maxAltM)} 产出了非有限 altitude`);
+    assert.ok(Number.isFinite(r.total), `maxAltM=${String(maxAltM)} 产出了非有限 total`);
+  }
+
+  // 真正的风险断言:5000m 级雪山绝不能被判成入门/休闲。
+  // 高反是硬伤,不是「累一点」——给入门者这种评分等于骗他上山。
+  const snow = computeBreakdown({ days: 6, distanceKm: 80, climbM: 4000, maxAltM: 5000, techLevel: 1 });
+  assert.ok(snow.suggested >= 4,
+    `5000m/6天/80km/爬升4000m 被判成 ★${snow.suggested}(${snow.label}),高反风险被低估了`);
+});

@@ -39,6 +39,21 @@ test('planDays:超过单日上限时切分并打 overKm 标记', () => {
   assert.equal(totalKm, 700); // 全程守恒
 });
 
+test('planDays:单条 leg 超上限时不与前序短 leg 叠加(曾把 381+711 堆成 962km)', () => {
+  const loop2 = ['A', 'B', 'C', 'D', 'E', 'A'].map((name) => ({ name }));
+  const l2 = [{ from: 'A', to: 'B', km: 412 }, { from: 'B', to: 'C', km: 96 },
+    { from: 'C', to: 'D', km: 65 }, { from: 'D', to: 'E', km: 90 },
+    { from: 'E', to: 'A', km: 711 }];
+  const drive = planDays(loop2, l2, null, 5, 400).filter((d) => d.type === 'drive');
+  assert.equal(drive.length, 3, '超长 leg 应独占一天');
+  // 711km 那条不能被前面的 96+65+90=251km 拖着走
+  const last = drive[drive.length - 1];
+  assert.equal(last.km, 711);
+  assert.equal(last.overKm, true, '711km 单日仍超上限,必须保留提示');
+  // 全程守恒
+  assert.equal(drive.reduce((s, d) => s + d.km, 0), 412 + 96 + 65 + 90 + 711);
+});
+
 test('planDays:天数不足时给出提示日', () => {
   const days = planDays(loop, legs, null, 1, 200);
   const notes = days.filter((d) => d.type === 'note');
@@ -119,6 +134,33 @@ test('hikeBudgetItem:门票按人头,未标注按 0', () => {
   assert.equal(hikeBudgetItem({ name: '测试线', tickets: 60 }, 3).amount, 180);
   assert.ok(hikeBudgetItem({ name: '测试线', tickets: 60 }, 3).note.includes('3 人'));
   assert.equal(hikeBudgetItem({ name: '测试线' }, 2).amount, 0);
+});
+
+// ---------- 回程无票的时刻衔接(回归:曾崩在 planner.js) ----------
+
+const { hourOf } = require('./lib/planner.js');
+
+test('hourOf:正常时刻取小时,空/脏值一律 null 而不是 0', () => {
+  assert.equal(hourOf('09:35'), 9);
+  assert.equal(hourOf('00:01'), 0);
+  assert.equal(hourOf('15:00'), 15);
+  // 这几条是崩溃根因:Number('') === 0,而 0 < 10 会被当成"清晨发车"
+  assert.equal(hourOf(undefined), null);
+  assert.equal(hourOf(null), null);
+  assert.equal(hourOf(''), null);
+  assert.equal(hourOf('待定'), null);
+  assert.equal(hourOf('99:00'), null);
+});
+
+test('回程无票时不该触发"清晨发车"分支(旧实现会崩在 null.chosen)', () => {
+  const railBack = { chosen: null, presale: false };
+  const schedule = [{ type: 'drive', text: '驾车' }];
+  const departHour = hourOf(railBack.chosen?.startTime);
+  const wouldAnnotate = departHour !== null && departHour < 10;
+  assert.equal(wouldAnnotate, false, '无票不得进入早班分支');
+  // 旧写法在这里等价于 true,随后 lastDrive.earlyDepart = railBack.chosen.startTime 崩掉
+  assert.equal(Number(String(railBack.chosen?.startTime || '').slice(0, 2)), 0);
+  assert.equal(schedule[0].earlyDepart, undefined, '未标注早班出发');
 });
 
 // ---------- 驾车路线抽稀 ----------

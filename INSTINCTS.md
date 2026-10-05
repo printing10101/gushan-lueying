@@ -123,3 +123,31 @@
 - 沙箱内实测 Electron 的两个必要条件:`app.disableHardwareAcceleration()` +
   `app.commandLine.appendSwitch('in-process-gpu')`,否则 GPU 进程崩溃
   (`exit_code=-1073741819`)导致 `loadFile` 直接 ERR_FAILED,看起来像代码写错了。
+
+## `Number(String(x || '').slice(0,2))` 的 0 点陷阱
+
+- 2026-10-13:`planner.js` 在回程没查到可购车次时崩在
+  `Cannot read properties of null (reading 'startTime')`。看着像数据问题,其实是老代码缺陷。
+- 根因是三层叠加:`railBack.chosen?.startTime` 在 chosen 为 null 时得 `undefined`,
+  `undefined || ''` 得 `''`,`Number('')` 得 **0**(不是 NaN!),而 `0 < 10` 成立——
+  于是「回程没票」反而进了「清晨发车」分支,进去后才解引用 `null.chosen`。
+  早到分支(`>= 15`)没这个毛病,因为 0 过不了那道门,纯属运气。
+- 修法不是加 `?? 0` 之类的包装,而是让「解析不出」和「0 点」可区分:
+  `hourOf()` 对空/脏值返回 `null`,分支写成 `hourHour !== null && hour < 10`。
+- 同类模式一律警惕:`Number()` 对 `''`/`[]`/`false` 都返回 0,`isFinite(0)` 为真。
+  凡是想表达「有这个字段且值有效」,就不能拿 `Number.isFinite` 当门槛。
+- 教训延伸:**冒烟跑不通时要先分清是数据错还是代码错**。本例数据完全合法
+  (成都东→拉萨 7 天内确实没有可购车次),是 planner 原有的空值处理缺陷,跟新区域无关。
+
+## 贪心累积切分:超长 leg 会拖垮同一天
+
+- `planDays` 原本按 `km >= maxDriveKm` 切分,遇到「单条 leg 自身就超上限」时会失手:
+  藏东南 `然乌→拉萨` 单条 711km(直线估算×1.3),前面已累积 96+65+90=251km,
+  结果一天排出 **962km / 21h**。
+- 修法:加入 leg 前先看它自身是否超上限,超了就把当日已累积的 leg 冲掉,让它独占一天。
+  改完 995km → 711km(仍超,但那是一条真路,拆不成两天),并保留 `overKm` 标记让 UI 提示。
+- **动手前先量化影响面**:15 个区域逐个模拟修前修后,结果只有 `zangdongnan` 变化,
+  其余 14 个完全不变——这才敢改共享算法。
+- 修不掉的要说清:修后最差日仍超 400km 的区域还有 chuanxi(623)、sanxia(524)、
+  gannan(491)、qinghaihu(413)、jinbei(407)。这些是环线本身太长,
+  只能靠 `overKm` 提示 + 让用户自己加天数,**不要假装算法能解决**。

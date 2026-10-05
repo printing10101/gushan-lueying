@@ -60,6 +60,18 @@ function distanceKm(a, b) {
 }
 
 // 最近的环线节点。返回该节点所属区域与距离——不只给区域,距离要能给人复核。
+//
+// 两类线路必须在这里就排除,否则会生成「看着合理、根本开不过去」的行程:
+//   · 跨境(港澳台):内地车不能自驾跨境进香港/澳门。内地车进港需「粤港跨境私家车
+//     常规配额」(抽签,中签率极低);反向的「港车北上」只限持香港居民身份证+回乡证的
+//     香港居民,且每人每年在内地累计停留不超180 天。澳门同理需澳车北上/跨境配额。
+//     麦理浩径/凤凰径/卫奕信径/港岛径/路环岛地理上贴着深圳(直线仅 30km),
+//     haversine 判不出「过不去」,但真实车程要过关+通关,不是 30km。所以按省名硬排除。
+//   · 跨省:t.province ≠ region.province 时,即使直线距离近也不收。
+//     跨省不是绝对不可能(例如贵州线路可从广西节点进),但那需要人工逐条裁决,
+//     不该由脚本自动写进数据。
+const CROSS_BORDER = new Set(['香港', '澳门', '台湾']);
+
 function nearestNode(trail) {
   if (!trail.start || !Number.isFinite(trail.start.lng) || !Number.isFinite(trail.start.lat)) {
     return null;
@@ -72,6 +84,26 @@ function nearestNode(trail) {
     }
   }
   return best;
+}
+
+// 判定是否可挂到候选区域下:跨境直接不可;跨省需人工裁决。
+//
+// 选区域的原则就是**就近**,曾试过「同省优先」被两条真实数据否掉:
+//   · 浙西三尖距浙江临安 55km、距安徽绩溪 43km;
+//   · 清凉峰南山脊(area 写明「杭州·临安—安徽绩溪」,本来就走绩溪一侧山脊)
+//     距绩溪 10km、距临安 85km。
+// 强制同省会把这两条推去更远的地方,判据反而制造「开过去更远」的行程。
+// 环线跨市界、跨省界是合法的(南太行/河南收山西的王莽岭,距该环线 14km)。
+// 判据与 test/trails-data.test.mjs 的「起点地理上确实靠近该环线」保持一致。
+function assignable(trail, near) {
+  if (CROSS_BORDER.has(trail.province)) {
+    return { ok: false, reason: '跨境线路,内地车无法自驾往返(需配额或通关)' };
+  }
+  const region = regions[near.regionId];
+  if (region && trail.province !== region.province) {
+    return { ok: false, reason: `跨省(${trail.province}→${region.province}),需人工裁决` };
+  }
+  return { ok: true };
 }
 
 // ── 第1 步:校验已有人工标注,不一致就报出来(不改写) ──
@@ -97,13 +129,26 @@ for (const trail of Object.values(trails)) {
 // 就再也进不来,这些线路的 node 会永远空着,planner 退化成 loop[1] 兜底、行程顺序出错。
 const pending = [];
 const nodePending = [];
+const rejected = [];
 for (const [id, trail] of Object.entries(trails)) {
   const near = nearestNode(trail);
   if (!near) continue;
+  const pick = near;
+  const ok = assignable(trail, pick);
   if (!trail.regionId) {
-    if (near.km <= MAX_KM) pending.push({ id, name: trail.name, province: trail.province, ...near });
+    if (!ok.ok) {
+      // 距离够近但不可挂的,单独列出来——这些线路在 UI 上显示「未接入」,
+      // 用户会想知道为什么,清单比一句「未接入」有用。
+      if (pick.km <= MAX_KM) rejected.push({ id, name: trail.name, province: trail.province, ...pick, reason: ok.reason });
+      continue;
+    }
+    if (pick.km <= MAX_KM) pending.push({ id, name: trail.name, province: trail.province, ...pick });
   } else if (!trail.node) {
-    nodePending.push({ id, name: trail.name, province: trail.province, ...near });
+    if (!ok.ok) {
+      rejected.push({ id, name: trail.name, province: trail.province, ...pick, reason: ok.reason });
+      continue;
+    }
+    nodePending.push({ id, name: trail.name, province: trail.province, ...pick });
   }
 }
 
@@ -138,6 +183,13 @@ console.log('\n待补 node 明细:');
 if (!nodePending.length) console.log('   (无)');
 for (const p of nodePending.sort((a, b) => a.km - b.km)) {
   console.log(`   ${String(Math.round(p.km)).padStart(4)}km  ${p.name.padEnd(20)}${p.province.padEnd(5)}→ ${p.regionId}(${p.nodeName})`);
+}
+
+if (rejected.length) {
+  console.log(`\n⚠ 距离够近但**不可接入** ${rejected.length} 条(保持悬空,不做假行程):`);
+  for (const r of rejected.sort((a, b) => a.km - b.km)) {
+    console.log(`   ${String(Math.round(r.km)).padStart(4)}km  ${r.name.padEnd(20)}${r.province.padEnd(5)}→ 最近节点 ${r.nodeName} — ${r.reason}`);
+  }
 }
 
 // ── 写回 ──
