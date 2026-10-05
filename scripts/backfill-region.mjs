@@ -100,8 +100,12 @@ function assignable(trail, near) {
     return { ok: false, reason: '跨境线路,内地车无法自驾往返(需配额或通关)' };
   }
   const region = regions[near.regionId];
-  if (region && trail.province !== region.province) {
-    return { ok: false, reason: `跨省(${trail.province}→${region.province}),需人工裁决` };
+  // 跨省不等于不可接入。判据与 test/trails-data.test.mjs 对齐:
+  // ① 近距跨省(≤80km)合法——环线跨省界是常态(南太行/河南收山西王莽岭 14km、
+  //    长三角/江苏收上海佘山 8km、三峡/湖北收重庆三峡之巅 8km);
+  // ② 超距还跨省才是真错配,那种情况需人工裁决。
+  if (region && trail.province !== region.province && near.km > MAX_KM) {
+    return { ok: false, reason: `超距跨省(${trail.province}→${region.province},${Math.round(near.km)}km),需人工裁决` };
   }
   return { ok: true };
 }

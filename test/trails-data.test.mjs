@@ -8,6 +8,9 @@ const assert = require('node:assert');
 
 const trails = store.read('trails');
 const regions = store.read('regions');
+// 自动回填判定半径,与 scripts/backfill-region.mjs 的 DEFAULT_MAX_KM 保持一致。
+// 提到文件级:多条测试都要用(跨省合法性、地理校验、超距检查)。
+const AUTO_MAX_KM = 80;
 const TYPES = ['长线重装', '雪山攀登', '高原转山', '古道', '沙漠', '长城', '城市周边', '山地纵走', '景区步道', '峡谷穿越'];
 const STATUSES = ['开放', '部分管控', '管控', '禁入', '关闭'];
 
@@ -91,11 +94,39 @@ function distanceKm(a, b) {
 //   · 清凉峰南山脊(area 写明「杭州·临安—安徽绩溪」,本来就走绩溪一侧山脊)
 //     距绩溪 10km、距临安 85km。
 // 强制同省会把这两条推去更远的地方,判据反而制造「开过去更远」的行程。
-// 环线跨市界、跨省界是合法的(南太行/河南收山西的王莽岭,距该环线 14km),
+// 环线跨市界、跨省界是合法的(南太行/河南收山西的王莽岭 14km、
+// 长三角/江苏收上海佘山 8km、三峡/湖北收重庆三峡之巅 8km、皖南收浙江清凉峰 10km),
 // 真正的错只在于「离哪个环线都远」。
 //
 // 唯一单独处理的是跨境(港澳台):内地车不能自驾跨境,它们不该挂进任何区域。
 const CROSS_BORDER_PROVINCES = new Set(['香港', '澳门', '台湾']);
+
+// 近距跨省必须允许(这条被真实数据钉死过一次:旧的 backfill 脚本对跨省
+// 无条件硬排除,结果佘山九峰/清凉峰/三峡之巅/阴条岭全被误卡成悬空)。
+// 判据与下面「超距可以接受,但不得跨省」那条一致:只有「超距+跨省」才是错配。
+test('近距跨省合法:跨省线路挂在邻省环线上不是错配', () => {
+  const crossProvince = [];
+  for (const [id, t] of Object.entries(trails)) {
+    if (!t.regionId) continue;
+    const region = regions[t.regionId];
+    if (!region || t.province === region.province) continue;
+    const node = (region.loop || []).find((n) => n.name === t.node);
+    if (!node) continue;
+    crossProvince.push({ name: t.name, province: t.province, region: region.province,
+      km: Math.round(distanceKm(t.start, node)) });
+  }
+  // 一旦建了跨省区域,近距跨省条目就应该存在;存在时必须都在阈值内
+  for (const c of crossProvince) {
+    assert.ok(c.km <= AUTO_MAX_KM,
+      `${c.name}(${c.province}→${c.region})相距 ${c.km}km 超过 ${AUTO_MAX_KM}km,` +
+      '超距又跨省才是真错配,应当人工裁决而非自动挂靠');
+  }
+  // 防退化:若哪天规则被改回「跨省一律拒绝」,这个断言会红
+  assert.ok(crossProvince.length > 0,
+    '库里应当存在近距跨省的接入线路(长三角收上海佘山/皖南收浙江清凉峰),' +
+    '若为 0 说明跨省硬排除规则被改回去了');
+});
+
 
 test('已标注 regionId 的线路,起点地理上确实靠近该环线(防手工填错)', () => {
   const offenders = [];
@@ -129,7 +160,6 @@ test('已标注 regionId 的线路,起点地理上确实靠近该环线(防手�
 //     逼着人删掉正确数据或放宽阈值让真错配钻进来。
 // 所以这里只检查「超距且跨州」——省份与区域所在地不一致才是真错配。
 test('已标注 regionId 的线路:超距可以接受,但不得跨省', () => {
-  const AUTO_MAX_KM = 80;
   const problems = [];
   for (const [id, t] of Object.entries(trails)) {
     if (!t.regionId) continue;

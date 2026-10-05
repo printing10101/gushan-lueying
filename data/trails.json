@@ -2091,7 +2091,9 @@
       "4223m 高反",
       "山顶天气多变"
     ],
-    "supplies": "景区有售卖,轿子山镇食宿"
+    "supplies": "景区有售卖,轿子山镇食宿",
+    "regionId": "dianzhong",
+    "node": "转龙镇"
   },
   "xueling": {
     "name": "雪岭火峰",
@@ -2127,7 +2129,9 @@
       "冬季雪坡冰滑",
       "山脊风大"
     ],
-    "supplies": "自备水粮,法者乡补给"
+    "supplies": "自备水粮,法者乡补给",
+    "regionId": "dianzhong",
+    "node": "转龙镇"
   },
   "haba": {
     "name": "哈巴雪山",
@@ -4493,7 +4497,9 @@
       "大巴山原始森林迷路",
       "天气多变"
     ],
-    "supplies": "无补给,重装自给,巫山县备物资"
+    "supplies": "无补给,重装自给,巫山县备物资",
+    "regionId": "sanxia",
+    "node": "巫山"
   },
   "sanxiazhidian": {
     "name": "三峡之巅徒步(白帝城—坳口)",
@@ -4529,7 +4535,9 @@
       "夔门绝壁栈道,恐高者量力",
       "夏季高温"
     ],
-    "supplies": "白帝城/三峡之巅有售卖,奉节县食宿"
+    "supplies": "白帝城/三峡之巅有售卖,奉节县食宿",
+    "regionId": "sanxia",
+    "node": "奉节"
   },
   "wugongshan": {
     "name": "武功山穿越(沈子村—金顶—发云界—龙山村)",
@@ -5219,7 +5227,9 @@
       "太湖之滨湿热,夏季蚊虫",
       "岔路多"
     ],
-    "supplies": "沿线有补给点,无锡市区便利"
+    "supplies": "沿线有补给点,无锡市区便利",
+    "regionId": "yangtzedelta",
+    "node": "无锡"
   },
   "sheshan-jiufeng": {
     "name": "佘山九峰连穿",
@@ -5252,7 +5262,9 @@
       12
     ],
     "tickets": 0,
-    "supplies": "佘山景区售卖便利,地铁可达"
+    "supplies": "佘山景区售卖便利,地铁可达",
+    "regionId": "yangtzedelta",
+    "node": "松江"
   },
   "qingliangfeng": {
     "name": "清凉峰(南山脊)",
@@ -5287,7 +5299,9 @@
       "冬季失温",
       "保护区管控需报备"
     ],
-    "supplies": "无补给,自给;永来村/银龙坞补给"
+    "supplies": "无补给,自给;永来村/银龙坞补给",
+    "regionId": "wannan",
+    "node": "绩溪"
   },
   "tianmu-qijian": {
     "name": "天目山七尖",
