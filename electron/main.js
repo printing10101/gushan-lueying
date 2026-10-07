@@ -12,6 +12,7 @@ if (process.env.GUSHAN_SOFTWARE_RENDER === '1' || !sessionName || sessionName.st
 
 const store = require('../lib/store');
 const { resolveStaticPath } = require('../lib/static-guard');
+const { decideServe } = require('../lib/serve-policy');
 const rail = require('../lib/rail12306');
 const weather = require('../lib/weather');
 const planner = require('../lib/planner');
@@ -88,12 +89,15 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   store.ensureConfig();
-  if (process.env.GUSHAN_SERVE === '1') {
+  // 来源策略见 lib/serve-policy.js:默认自动(有腾讯地图 Key 且无高德 JS Key 就走本地 http,
+  // 因为腾讯 GL 拒绝 file://);GUSHAN_SERVE=0 强制回 file://,=1 强制开。
+  const policy = decideServe({ env: process.env, cfg: store.read('config') || {} });
+  console.log(`[来源策略] ${policy.mode} —— ${policy.reason}`);
+  if (policy.serve) {
     const server = await startLocalServer();
     const { port } = server.address();
     serveOrigin = `http://127.0.0.1:${port}`;
-    // 这行是给"该把什么填进地图白名单"用的:控制台白名单/来源校验填这个地址
-    console.log(`== 本地服务(仅回环) ${serveOrigin} —— 地图 JS API 白名单可填 127.0.0.1 ==`);
+    console.log(`[本地服务] ${serveOrigin}(只放行 src/ 与 lib/,data/ 不出网口)`);
   }
   createWindow();
 });

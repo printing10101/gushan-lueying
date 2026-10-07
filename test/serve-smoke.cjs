@@ -8,7 +8,7 @@
 // 页面里怎么 fetch 都碰不到那条分支——它在 test/static-guard.test.mjs 里用纯函数钉住。
 //
 // 用法:npx electron test/serve-smoke.cjs   (全部通过 exit 0)
-process.env.GUSHAN_SERVE = '1'; // 必须在 require main.js 之前设置
+// 不设 GUSHAN_SERVE:这里验的正是「自动开」——config 里有腾讯 Key 就该走本地 http 来源
 const { app, BrowserWindow } = require('electron');
 
 app.disableHardwareAcceleration();

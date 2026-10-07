@@ -10,6 +10,7 @@
 // 否则实现错、期望也跟着错,两边一起绿。
 //
 // 用法:npx electron test/dom-smoke.cjs   (全部通过 exit 0)
+process.env.GUSHAN_SERVE = '0'; // 这条冒烟专门测 file:// 那条路径(自动开之后必须显式锁住)
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
