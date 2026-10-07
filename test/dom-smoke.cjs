@@ -282,6 +282,23 @@ app.whenReady().then(async () => {
       return document.getElementById('left-msg').textContent;`);
     check('改成不同站后提示消失(不留僵尸警告)', String(noWarn).trim() === '', `残留: ${noWarn}`);
 
+    // ---- 高德安全密钥:必须在脚本加载前挂到 window ----
+    // 高德自 2021-12-02 起要求 Key + 安全密钥配对;不挂的后果是"地图空白 + 高德内部报 INVALID_USER_SCODE",
+    // 页面自己看不出来,所以这条必须由冒烟挡住。
+    const sec = await evalIn(`
+      delete window._AMapSecurityConfig;
+      // 先测"没配":干净的 window 上调一次空值,不应该凭空造出一个空配置对象
+      const noCode = applyAmapSecurityCode('');
+      const afterEmpty = !!window._AMapSecurityConfig;
+      // 再测"配了":必须在脚本加载前就挂上
+      const withCode = applyAmapSecurityCode('smoke-code');
+      const after = window._AMapSecurityConfig && window._AMapSecurityConfig.securityJsCode;
+      return { noCode, afterEmpty, withCode, after };`);
+    check('安全密钥会被挂到 window._AMapSecurityConfig', sec && sec.withCode === true && sec.after === 'smoke-code',
+      `实得 ${JSON.stringify(sec)}`);
+    check('没配安全密钥时不凭空写一个空对象(旧 Key 不需要它)', sec && sec.noCode === false && sec.afterEmpty === false,
+      `实得 ${JSON.stringify(sec)}`);
+
     // ---- 规划页的"顺路再加一条"下拉 ----
     const trailsUi = await evalIn(`
       const t1 = document.getElementById('trail'), t2 = document.getElementById('trail2');

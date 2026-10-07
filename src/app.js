@@ -107,9 +107,10 @@ async function initInner() {
   checkOriginVsHub(); // 回填后也要判一次:上次存的站可能正等于这次选的区域枢纽
 
   // 高德脚本后台加载,不挡规划表单交互;就绪后补画当前区域与已展示的行程
-  if (cfg?.amapKeyJs) bootMap(cfg.amapKeyJs);
+  if (cfg?.amapKeyJs) bootMap(cfg.amapKeyJs, cfg.amapSecurityJsCode);
   else {
-    $('config-hint').textContent = '未配置高德 Key:请在 data/config.json 填入 amapKeyJs(地图)与 amapKeyWeb(路径规划)';
+    $('config-hint').textContent = '未配置高德 Key:请在 data/config.json 填入 amapKeyJs(地图)、'
+      + 'amapKeyWeb(路径规划);2021-12-02 之后申请的 JS API Key 还要填 amapSecurityJsCode(安全密钥)';
     $('map').innerHTML = '<p class="muted map-empty">地图需要高德 JS API Key,填写后重启应用</p>';
   }
   renderConfigGaps(cfg);
@@ -122,8 +123,8 @@ async function initInner() {
 }
 
 // 地图启动与失败重试:失败后给"重试"按钮,不必为一次网络抖动重启应用
-function bootMap(key) {
-  loadAmap(key).then(() => {
+function bootMap(key, securityCode) {
+  loadAmap(key, securityCode).then(() => {
     initMap();
     drawRegion(regionCache[$('region').value]);
     if (currentTrip) drawTrip(currentTrip, regionCache[currentTrip.input.regionId]);
@@ -131,12 +132,23 @@ function bootMap(key) {
     $('map').innerHTML = '<p class="muted map-empty">高德 JS API 加载失败,检查网络后<button id="map-retry" class="mark-btn">重试</button></p>';
     $('map-retry').onclick = () => {
       $('map').innerHTML = '<p class="muted map-empty">正在重新加载…</p>';
-      bootMap(key);
+      bootMap(key, securityCode);
     };
   });
 }
 
-function loadAmap(key) {
+// 安全密钥必须在 <script> 加载**之前**挂到 window 上:高德自 2021-12-02 起要求
+// 「Key + 安全密钥」配对使用,只填 Key 会在服务调用时报 INVALID_USER_SCODE
+// (报错发生在高德内部的服务里,页面上只看到地图空着,极难自查)。
+// 返回 false 表示没配——旧 Key(2021-12-02 之前申请)不需要它,所以不配置不算错。
+function applyAmapSecurityCode(code) {
+  if (!code) return false;
+  window._AMapSecurityConfig = { securityJsCode: String(code) };
+  return true;
+}
+
+function loadAmap(key, securityCode) {
+  applyAmapSecurityCode(securityCode);
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = `https://webapi.amap.com/maps?v=2.0&key=${key}`;

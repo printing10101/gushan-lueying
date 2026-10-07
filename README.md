@@ -25,10 +25,16 @@
 ## 使用前必须做
 
 1. `npm install`
-2. 到 [lbs.amap.com](https://lbs.amap.com) 注册个人开发者,创建应用,添加两个 Key:
-   - **Web服务** → 填入 `data/config.json` 的 `amapKeyWeb`(首次运行会自动从 example 复制)
-   - **Web端(JS API)** → 填入 `amapKeyJs`
-3. 按你的车改 `data/config.json` 的 `fuel`(百公里油耗、油价);住宿/餐饮估算口径在 `lodging`/`food`。
+2. 到 [lbs.amap.com](https://lbs.amap.com) 注册个人开发者 → 控制台「应用管理 → 我的应用 → 创建新应用」→
+   在该应用下「添加 Key」,**同一个应用加两个 Key(服务平台选不同)**:
+   - 服务平台选 **Web服务** → 填进 `data/config.json` 的 `amapKeyWeb`(路径规划,只需 Key)
+   - 服务平台选 **Web端(JS API)** → 填进 `amapKeyJs`;**2021-12-02 之后申请的 Key 还必须把同页面给出的
+     「安全密钥」填进 `amapSecurityJsCode`**,否则地图能加载、服务调用却报 `INVALID_USER_SCODE`
+     (报错发生在高德内部,页面上只表现为地图空白,极难自查)。
+   - 三个字段都在 `data/config.json`(首次运行自动从 example 复制;该文件不入库)
+3. 按你的车改 `data/config.json` 的 `fuel`(百公里油耗、油价、油种);住宿/餐饮估算口径在 `lodging`/`food`,
+   季节系数表在 `data/seasonality.json`(节假日安排逐年维护,缺哪年就只按月份算)。
+4. 配好 Key 后跑 `node scripts/verify-amap-routes.mjs` 看"直线估算 vs 真实驾车里程"的差距表。
 
 ## 命令
 

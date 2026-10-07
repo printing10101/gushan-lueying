@@ -1,6 +1,7 @@
 {
   "amapKeyWeb": "",
   "amapKeyJs": "",
+  "amapSecurityJsCode": "",
   "fuel": {
     "consumptionLPer100km": 8,
     "pricePerL": 8.2,
@@ -22,5 +23,5 @@
     "perPersonPerDay": 80,
     "_说明": "餐饮估算:每人每天餐标"
   },
-  "_说明": "amapKeyWeb=Web服务类型(路径规划),amapKeyJs=Web端JS API(地图显示),都在 lbs.amap.com 创建;flightCityPinyin=常住城市拼音(12306 无票时「查机票」跳携程用,目的地取区域库 hub.flightCity)"
+  "_说明": "amapKeyWeb=Web服务类型(路径规划,只需 Key),amapKeyJs=Web端JS API(地图显示);amapSecurityJsCode=JS API 的安全密钥,2021-12-02 之后申请的 Key 必须成对填写(在控制台同一个应用下)。都在 lbs.amap.com 创建;flightCityPinyin=常住城市拼音(12306 无票时「查机票」跳携程用,目的地取区域库 hub.flightCity)"
 }
