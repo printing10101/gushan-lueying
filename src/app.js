@@ -587,9 +587,14 @@ async function renderResult(trip) {
     + `<span class="muted">${esc(trailNames)}${trip.trails && trip.trails.length > 1 ? `(${trip.trails.length} 条串联)` : ''}</span></div>`
     + `${railHtml(trip.railOut, '去程火车', 'railOut')}</div>`);
   // 里程口径:没配高德 Key 时全程是直线×1.3 估算,必须在最显眼处说清,不能只藏在预算备注里
-  if (trip.distanceEstimated) {
-    html.push('<p class="warn">里程为直线×1.3 估算(未配置高德 Key):里程只保证不低估、'
-      + '过路费按 0.45 元/km 估、地图无真实路线。填好 <code>data/config.json</code> 的 amapKeyWeb 后重新生成即为真实驾车路线。</p>');
+  // 里程口径:存档自带文案(planner 的 routeNote),旧档没有就按 distanceEstimated 兜底
+  if (trip.kmNote) {
+    const warn = trip.routeProvider === 'estimate';
+    html.push(`<${warn ? 'p class="warn"' : 'p class="muted"'}>里程口径:${esc(trip.kmNote)}`
+      + `${warn ? '。填好 data/config.json 的 amapKeyWeb 或 tencentKeyWeb 后重新生成即为真实驾车路线' : ''}</p>`);
+  } else if (trip.distanceEstimated) {
+    html.push('<p class="warn">里程为直线×1.3 估算(未配置路线 Key):里程只保证不低估、'
+      + '过路费按 0.45 元/km 估、地图无真实路线。</p>');
   }
   // 票价为什么是估算的:接口失败 / 未查到车次 / 预售期外,三件事都得说清,别让人以为这条线不通
   if (trip.railNote) html.push(`<p class="warn">${esc(trip.railNote)}</p>`);

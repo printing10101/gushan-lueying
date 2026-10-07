@@ -25,16 +25,28 @@
 ## 使用前必须做
 
 1. `npm install`
-2. 到 [lbs.amap.com](https://lbs.amap.com) 注册个人开发者 → 控制台「应用管理 → 我的应用 → 创建新应用」→
+2. **路线来源二选一**(都留空也能用,只是里程走直线估算):
+   - **腾讯位置服务(推荐先试这家)**:到 [lbs.qq.com](https://lbs.qq.com) 注册 → 控制台创建应用 → 添加 Key,
+     服务平台选 **WebServiceAPI** → 填进 `data/config.json` 的 `tencentKeyWeb`。官网 FAQ 原文:
+     「注册之后将获得"个人开发者"额度」,且「企业或其他非公益组织使用本服务不享受免费服务」——
+     即个人非商业自用有免费额度(具体数值在控制台「配额管理」页看)。
+     注意**腾讯的 JS API 明确"不再支持 file:// 方式"**(官方文档原文),而本应用是 file:// 加载的,
+     所以**地图暂时只能用高德底图,腾讯只用来取真实里程/时长**。
+   - **高德**:到 [lbs.amap.com](https://lbs.amap.com) 注册个人开发者 → 控制台「应用管理 → 我的应用 → 创建新应用」→
    在该应用下「添加 Key」,**同一个应用加两个 Key(服务平台选不同)**:
    - 服务平台选 **Web服务** → 填进 `data/config.json` 的 `amapKeyWeb`(路径规划,只需 Key)
    - 服务平台选 **Web端(JS API)** → 填进 `amapKeyJs`;**2021-12-02 之后申请的 Key 还必须把同页面给出的
      「安全密钥」填进 `amapSecurityJsCode`**,否则地图能加载、服务调用却报 `INVALID_USER_SCODE`
      (报错发生在高德内部,页面上只表现为地图空白,极难自查)。
-   - 三个字段都在 `data/config.json`(首次运行自动从 example 复制;该文件不入库)
+     三个字段(Key、JS API Key、安全密钥)都在 `data/config.json`(首次运行自动从 example 复制;该文件不入库)。
+     高德把「基础服务」挂到**技术服务使用许可**下面(许可协议原文:未付款无法获得许可、进而无法使用基础服务),
+     个人非商用要走"评估申请";腾讯是注册即给个人额度——这条路更顺,所以先试腾讯。
+   - `routeProvider` 留空 = 自动(有高德 Key 用高德、否则有腾讯 Key 用腾讯、都没有就直线估算);
+     显式写 `amap`/`tencent`/`estimate` 则以你写的为准,**指定了却没填对应 Key 会直接报错**,
+     不会静默退回估算(那会让人以为配好了、其实预算全是估的)。
 3. 按你的车改 `data/config.json` 的 `fuel`(百公里油耗、油价、油种);住宿/餐饮估算口径在 `lodging`/`food`,
    季节系数表在 `data/seasonality.json`(节假日安排逐年维护,缺哪年就只按月份算)。
-4. 配好 Key 后跑 `node scripts/verify-amap-routes.mjs` 看"直线估算 vs 真实驾车里程"的差距表。
+4. 配好 Key 后跑 `node scripts/verify-routes.mjs` 看"直线估算 vs 真实驾车里程"的差距表。
 
 ## 命令
 
@@ -117,7 +129,7 @@ node scripts/label-backlog.mjs              # 标注欠账:缺 tickets/risks/sup
 预算备注。导出的 Markdown 与打印件同样带这条说明——**用户看到的每一个公里数都知道自己是估的还是量的**。
 过路费此时走 `calcCosts` 既有的 0.45 元/km 估算分支并标「(估)」。
 估算系数 `LOOP_FACTOR` / 车速 `AVG_KMH` 收在 `lib/amap.js` 单一来源,
-`scripts/verify-amap-routes.mjs` 与 `scripts/smoke-region.mjs` 都引用它,不再各抄一份
+`scripts/verify-routes.mjs` 与 `scripts/smoke-region.mjs` 都引用它,不再各抄一份
 (抄本一旦和 planner 用的系数漂移,「估算 vs 真实」差距表就在骗人)。
 注意:坏坐标、配额超限、网络失败**不会**被估算兜掉——只有「没配 Key」这一种确定情况才降级,
 否则 `regions.json` 填错坐标会静默变成一条像模像样的假里程。
@@ -125,8 +137,8 @@ node scripts/label-backlog.mjs              # 标注欠账:缺 tickets/risks/sup
 配好 Key 后可以一次跑出全库对比:
 
 ```
-node scripts/verify-amap-routes.mjs              # 试运行,输出估算 vs 真实的逐条差距表
-node scripts/verify-amap-routes.mjs --only yili  # 只查一个区域
+node scripts/verify-routes.mjs              # 试运行,输出估算 vs 真实的逐条差距表
+node scripts/verify-routes.mjs --only yili  # 只查一个区域
 ```
 
 它会把 18 个区域每条 leg 的估算值与真实值并排列出,并单独标出两类值得警惕的偏差:
@@ -259,7 +271,7 @@ wannan 4→5、sanxia 3→5。
 
 | 文件 | 作用 |
 |---|---|
-| `data/config.json` | 高德 Key、油耗与油种、单日驾车上限、机票跳转出发城市(`flightCityPinyin`)、住宿/餐饮估算口径(`lodging`/`food`)、RunOS 服务地址(`runos.baseUrl`) |
+| `data/config.json` | 路线来源(`routeProvider`,留空=自动)+`amapKeyWeb`/`amapKeyJs`/`amapSecurityJsCode`(高德)+`tencentKeyWeb`(腾讯)、油耗与油种、单日驾车上限、机票跳转出发城市(`flightCityPinyin`)、住宿/餐饮估算口径(`lodging`/`food`)、RunOS 服务地址(`runos.baseUrl`) |
 | `data/regions.json` | 区域库:枢纽(含 `flightCity` 机票跳转目的地拼音)、所属省份与 `stay` 住宿/餐饮区域基准(驱动分省油价与吃住估算)、自驾环线节点(经纬度)、最佳季节、路况提示 |
 | `data/trails.json` | 全国徒步路线库:191 条著名路线按省份编排,含天数/里程/爬升/最高海拔/五星难度评级/通行状态;`scenery` 景色标签(词表见 `lib/recommend.js`,可为空)驱动智能推荐;带 `regionId`+`node` 的条目接入行程规划;`bestMonths` 结构化最佳月份驱动错季提醒与自动选线;`tickets`/`risks`/`supplies` 为自用参考的门票/风险/补给信息(见标注口径);`coordinateNote` 记录坐标修正的来源与依据(改过坐标的条目才有);`sourceNote` 记录里程/爬升/门票等数值的公开资料来源与估算部分(本轮新增的线路才有) |
 | `data/stations.json` | 12306 站名↔电报码缓存(自动生成) |
@@ -316,6 +328,19 @@ wannan 4→5、sanxia 3→5。
 - 界面默认走 GPU 合成(滚动/动画流畅);在无头服务或远程桌面(RDP)会话里自动退回软件渲染——那类环境下启动才可靠。需要手动强制软渲染时设环境变量 `GUSHAN_SOFTWARE_RENDER=1`。
 - 住宿/餐饮是 `config.json` 口径下的估算(预算备注里言明口径);火车票价/油费/过路费仍全部来自查询原值。
 - 高德免费额度自用绰绰有余;路线规划结果会随版本微调,属正常。
+- **路线来源三选一(`lib/routing.js`)**:两家厂商的约定几乎处处相反,所以隔在各自模块里、只对外给一种形状
+  (`{distanceKm, durationHours, tolls, path, estimated, provider}`):
+
+  | 维度 | 高德 | 腾讯 | 直线估算(兜底) |
+  |---|---|---|---|
+  | 坐标顺序 | `lng,lat` | **`lat,lng`**(写反会跑到地球另一边) | 同高德 |
+  | 距离单位 | 米 | 米 | 公里 |
+  | 时长单位 | 秒 | **分钟** | 按 45km/h 估 |
+  | 过路费 | 有 `tolls` | **没有该字段** → 按 0.45 元/km 估并标「(估)」 | 估 |
+  | 地图(JS API) | 支持(需 Key + 2021-12-02 后的安全密钥) | **官方明确不支持 file://** → 本应用画图仍走高德 | 只画节点直线骨架 |
+
+  每次生成行程的调用量 = 环线路段数(全市 3~8 次,中位 6 次),会话级缓存去重
+  (`lib/route-cache.js`,两家共用:in-flight 去重、失败不缓存、坏坐标不进缓存)。
 - **票价的三种"没有价"要分清**:预售期外(过些天再查就有)、接口失败(12306 会连续几分钟返回非 JSON,
   实测过)、确实没有可购车次。前两种现在会填**占位估算**(往返实价 ÷ 2 × 人数,复用推荐页那套),
   页面明写"占位估算,出发前请复核",不再让预算留空洞;连占位价都拿不到时说清原因、金额仍为 null。

@@ -1,6 +1,6 @@
 import { createRequire } from 'module';
 const require = createRequire(new URL('../package.json', import.meta.url));
-const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan, buildLegs, noTrailHint, tripIdFor, dayAnchors, forecastsByDate, railBudgetItem, pickTrails, fillSpareDays } = require('./lib/planner.js');
+const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan, buildLegs, noTrailHint, tripIdFor, dayAnchors, forecastsByDate, railBudgetItem, pickTrails, fillSpareDays, routeNote } = require('./lib/planner.js');
 const test = require('node:test');
 const assert = require('node:assert');
 
@@ -378,18 +378,19 @@ test('planDays:jingxi 实测形态——香八拉在前,且五段不再堆成 51
 test('buildLegs:未配 Key 时逐段估算并全程标注 estimated', async () => {
   const loop = [{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 },
     { name: 'A', lng: 100, lat: 30 }];
-  const { legs, estimated } = await buildLegs(loop, { hasKey: false });
+  const { legs, estimated, provider } = await buildLegs(loop, { provider: 'estimate' });
   assert.equal(legs.length, 2);
   assert.equal(estimated, true);
   assert.ok(legs[0].km > 0);
   assert.equal(legs[0].estimated, true);
   assert.equal(legs[0].route.path, '', '估算没有真实路线可画');
+  assert.equal(provider, 'estimate', '要把用了哪一路报出来,页面与导出据此说清来源');
 });
 
 test('buildLegs:配了 Key 时 routeFn 抛错必须原样抛出,不静默降级成估算', async () => {
   const loop = [{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 }];
   await assert.rejects(
-    buildLegs(loop, { hasKey: true, routeFn: async () => { throw new Error('高德路径规划坐标非法'); } }),
+    buildLegs(loop, { provider: 'amap', routeFn: async () => { throw new Error('高德路径规划坐标非法'); } }),
     /坐标非法/,
   );
 });
@@ -480,4 +481,29 @@ test('fillSpareDays:排满/排不下时原样返回,偏紧提示必须留着', (
   // 排太多(带 note 表示偏紧):原样返回,提示不能被吃掉
   const withNote = [{ type: 'drive' }, { type: 'note', text: '偏紧' }];
   assert.deepEqual(fillSpareDays(withNote, 2), withNote, '偏紧提示要留着,不能因为补机动日就丢了它');
+});
+
+// ---- 里程来源的口径文案(页面/导出都吃它,错了会让人把估算当实价) ----
+test('routeNote:三家各说各的,腾讯那档必须点明"过路费仍是估的"', () => {
+  assert.match(routeNote('amap'), /高德真实驾车路线/);
+  assert.match(routeNote('amap'), /过路费.*高德/);
+  const tx = routeNote('tencent');
+  assert.match(tx, /腾讯真实驾车路线/);
+  assert.match(tx, /过路费腾讯不返回/, '腾讯没有 tolls 字段,不写清楚就等于把估的过路费说成实价');
+  assert.match(routeNote('estimate'), /直线×1.3 估算/);
+  assert.ok(routeNote('estimate').includes('未配高德/腾讯 Key'), '两家的 Key 名都要点到,用户才知道该配哪个');
+  assert.ok(routeNote('whatever').includes('直线×1.3 估算'), '不认识的来源按最保守的口径说(估的)');
+});
+
+test('buildLegs:provider 可由 cfg 决定(没配任何 Key → estimate,不会去发请求)', async () => {
+  const loop = [{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 }];
+  const { legs, provider } = await buildLegs(loop, { cfg: { routeProvider: 'estimate' } });
+  assert.equal(provider, 'estimate');
+  assert.equal(legs.length, 1);
+  assert.ok(legs[0].km > 0);
+});
+
+test('buildLegs:cfg 里指定了没配 Key 的 provider 会响亮报错,不静默退回估算', async () => {
+  const loop = [{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 }];
+  await assert.rejects(buildLegs(loop, { cfg: { routeProvider: 'tencent' } }), /tencentKeyWeb/);
 });

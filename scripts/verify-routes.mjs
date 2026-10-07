@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 用高德 Web 服务 API 验证全部区域的**真实驾车里程**,并与项目当前的
+// 用真实路线服务(高德 / 腾讯)验证全部区域的**真实驾车里程**,并与项目当前的
 // 「直线×1.3」估算值逐条对比,输出一张差距表。
 //
 // 为什么需要这个:`data/config.json` 的 `amapKeyWeb` 为空时,planner 用
@@ -8,9 +8,9 @@
 // 被严重高估(=估算在骗人,预算会跟着错)。
 //
 // 前置:data/config.json 的 amapKeyWeb 填好高德「Web服务」类型的 Key。
-// 用法:node scripts/verify-amap-routes.mjs            试运行,不写文件
-//      node scripts/verify-amap-routes.mjs --apply    写回 data/regions.json
-//      node scripts/verify-amap-routes.mjs --only jingbei2   只查一个区域
+// 用法:node scripts/verify-routes.mjs            试运行,不写文件
+//      node scripts/verify-routes.mjs --apply    写回 data/regions.json
+//      node scripts/verify-routes.mjs --only jingbei2   只查一个区域
 //
 // ⚠️ 写回是破坏性操作:会把真实里程写进 regions.json 的节点字段。
 // 先跑试运行看差距表,确认没问题再加 --apply。
@@ -26,21 +26,30 @@ const ROOT = path.join(__dirname, '..');
 const REGIONS = path.join(ROOT, 'data', 'regions.json');
 const CONFIG = path.join(ROOT, 'data', 'config.json');
 
+// provider 分发与真实路线都走 lib/routing.js,与 planner 用同一条路径
+const amap = require('../lib/amap');
+const routing = require('../lib/routing');
 const argv = process.argv.slice(2);
 const APPLY = argv.includes('--apply');
 const onlyIdx = argv.indexOf('--only');
 const ONLY = onlyIdx >= 0 ? argv[onlyIdx + 1] : null;
 
 const cfg = JSON.parse(fs.readFileSync(CONFIG, 'utf8'));
-if (!cfg.amapKeyWeb) {
-  console.error('缺少高德 Key:请到 lbs.amap.com 注册「Web服务」类型的 Key,'
-    + '填入 data/config.json 的 amapKeyWeb 后重跑。');
+const providerArg = argv.includes('--provider') ? argv[argv.indexOf('--provider') + 1] : '';
+if (providerArg) cfg.routeProvider = providerArg;
+let provider = '';
+try {
+  provider = routing.activeProvider(cfg);
+} catch (e) {
+  console.error(e.message);
+  process.exit(1);
+}
+if (provider === 'estimate') {
+  console.error('routeProvider 解析成 estimate:config 里 amapKeyWeb / tencentKeyWeb 都为空,'
+    + '没有真实里程可比——先申请一个 Key 再用这个脚本。');
   process.exit(1);
 }
 
-const amap = require('../lib/amap');
-
-// 高德 Web 服务有 QPS 限制(个人 Key 通常 3 次/秒),串行 + 间隔,别并发打。
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 估算口径单一来源:lib/amap.js。这里以前手抄了一份 haversine×1.3,
 // 抄本一旦和 planner 实际用的系数漂移,「估算 vs 真实」差距表就在骗人。
@@ -53,7 +62,7 @@ if (!Object.values(targets).every(Boolean)) {
   process.exit(1);
 }
 
-console.log(`== 高德 Web 服务 Key 已配置 ==`);
+console.log(`== 路线来源: ${routing.labelOf(provider)} ==`);
 console.log(`待验证区域 ${Object.keys(targets).length} 个\n`);
 
 const report = [];
@@ -69,7 +78,7 @@ for (const [rid, region] of Object.entries(targets)) {
     let real = null;
     let err = null;
     try {
-      const route = await amap.drivingRoute(from, to);
+      const route = await routing.drivingRoute(from, to, provider);
       real = Math.round(route.distanceKm);
     } catch (e) {
       err = e.message;
