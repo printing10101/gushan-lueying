@@ -279,6 +279,9 @@
         <label>徒步线路(可选,留空自动选)
           <select id="trail"><option value="">自动挑选</option></select>
         </label>
+        <label>顺路再加一条(可选,同区域)
+          <select id="trail2"><option value="">不加</option></select>
+        </label>
         <div id="trail-fit" class="fit-hint" hidden></div>
         <button id="generate">生成行程</button>
         <div id="left-msg"></div>
@@ -302,6 +305,12 @@
         <input id="rec-days" type="number" min="1" max="30" placeholder="最多天数(可留空)" aria-label="最多天数">
         <input id="rec-origin" list="rec-station-list" placeholder="出发站(估往返火车,可留空)" aria-label="出发车站">
         <datalist id="rec-station-list"></datalist>
+        <input id="rec-date" type="date" aria-label="出发日期(决定住宿/餐饮的季节系数)" title="留空则按中性基准,不算旺季">
+        <input id="rec-headcount" type="number" min="1" max="12" value="1" aria-label="出行人数(决定要几间房)" title="1 人也要包整间房,不是半个">
+        <select id="rec-tier" aria-label="住宿档次">
+          <option value="舒适">舒适档 ×1.0</option>
+          <option value="经济">经济档 ×0.6</option>
+        </select>
         <select id="rec-grade" aria-label="难度上限">
           <option value="">难度不限</option>
           <option value="1">★1 休闲栈道</option>
@@ -333,6 +342,8 @@
         <option value="1">★1 休闲</option>
       </select>
       <select id="lib-type" aria-label="按类型筛选"><option value="">全部类型</option></select>
+      <!-- 档位选项由 GushanLib.filters.ALT_BANDS 生成,改 lib 即生效,不用动这里 -->
+      <select id="lib-alt" aria-label="按最高海拔筛选"><option value="">全部海拔</option></select>
       <select id="lib-status" aria-label="按状态筛选">
         <option value="">全部状态</option>
         <option value="开放">开放</option>
@@ -348,6 +359,7 @@
       <select id="lib-sort" aria-label="排序方式">
         <option value="grade">按难度排序</option>
         <option value="climb">按累计爬升</option>
+        <option value="alt">按最高海拔</option>
         <option value="days">按天数</option>
         <option value="name">按名称</option>
       </select>
@@ -365,10 +377,17 @@
   <!-- 纯函数口径模块:主进程 require 同一份,渲染端挂 window.GushanLib 复用 -->
   <script>window.GushanLib = {};</script>
   <script src="../lib/seat.js"></script>
+  <!-- budget 必须在 recommend 之前:recommend.js 在加载时就解析 window.GushanLib.budget,
+       顺序反了推荐页的花费估算会拿到 undefined(同样是"不点不炸"那一类,故写死顺序并加注释) -->
+  <script src="../lib/budget.js"></script>
   <script src="../lib/recommend.js"></script>
   <script src="../lib/grading.js"></script>
   <script src="../lib/gear.js"></script>
   <script src="../lib/quickfacts.js"></script>
+  <script src="../lib/filters.js"></script>
+  <script src="../lib/risknotes.js"></script>
+  <script src="../lib/actuals.js"></script>
+  <script src="../lib/permit.js"></script>
   <script src="../lib/fitness.js"></script>
   <!-- trip-markdown 必须在 app.js 之前:导出行程走 LIB.tripMarkdown.tripToMarkdown,
        漏了这个标签要等用户点「导出」才炸(undefined 读属性),不点测不出来 -->

@@ -12,11 +12,18 @@ const $ = (id) => document.getElementById(id);
 // 而单测跑不到渲染层——曾实测到 6 个 lib 有 5 个因顶层 `const api` 撞名而静默失败。
 const LIB = window.GushanLib;
 const { pickSeat: seatPick } = LIB.seat;
-const { costBreakdown: costBreakdownOf, SCENERY: SCENERY_TAGS } = LIB.recommend;
+const { SCENERY: SCENERY_TAGS } = LIB.recommend;
+// 落地花费的公式只在 lib/budget.js 一份(推荐页与路线库卡片都用它),这里加前缀解构防撞名
+const { landBudget: budgetLand, oneTimeCosts: oneTimeOf } = LIB.budget;
 const { GRADE_LABELS: GRADE_TEXT } = LIB.grading;
 const { summitTemp: summitTempOf, gearChecklist: gearChecklistOf } = LIB.gear;
 const { quickFacts: quickFactsOf } = LIB.quickfacts;
 const { FIT_LABELS: FIT_TEXT, ADVICE_LABELS: ADVICE_TEXT } = LIB.fitness;
+// 海拔分档口径在 lib/filters.js(与单测同源);名字一律加后缀,避免与 lib 顶层声明撞名
+const { ALT_BANDS: ALT_BAND_LIST, hitAltBand: hitAltBandOf, byAlt: byAltDesc } = LIB.filters;
+const { normalizeRiskNotes: riskNotesOf } = LIB.risknotes;
+const { actualVsPlanned: actualVsPlannedOf } = LIB.actuals;
+const { permitNotice: permitNoticeOf } = LIB.permit;
 
 // HTML 转义:数据(手编 JSON/网络返回/存档/报错原文)不该在页面上长成标签或逃出属性
 function esc(v) {
@@ -77,6 +84,8 @@ async function initInner() {
   regionCache = regions;
   // 区域住宿/餐饮基准供卡片估算用(与主进程 rank 同一份映射)
   appCfg.regionStay = LIB.recommend.regionStayMap(regions);
+  // 季节系数表:卡片的人均估算要按"哪天出行"算,这张表由主进程读 data/seasonality.json 给过来
+  appCfg.seasonality = (await gushan.readData('seasonality')) || {};
   for (const [id, r] of Object.entries(regions)) {
     $('region').append(new Option(r.name, id));
   }
@@ -84,7 +93,10 @@ async function initInner() {
     drawRegion(regions[$('region').value]);
     renderRegionBrief(regions[$('region').value]);
     refreshTrailOptions($('region').value);
+    checkOriginVsHub();
   };
+  // 出发站与区域枢纽是否同站:切区域、改站名都要即时判(默认值是成都东,选川西就会撞)
+  $('origin').addEventListener('input', checkOriginVsHub);
   // 上次规划条件回填(含区域联动),没有存档才落到默认值
   if (!restoreForm()) {
     drawRegion(regions[$('region').value]);
@@ -92,6 +104,7 @@ async function initInner() {
     refreshTrailOptions($('region').value);
     $('start-date').value = addDaysStr(todayLocal(), 7);
   }
+  checkOriginVsHub(); // 回填后也要判一次:上次存的站可能正等于这次选的区域枢纽
 
   // 高德脚本后台加载,不挡规划表单交互;就绪后补画当前区域与已展示的行程
   if (cfg?.amapKeyJs) bootMap(cfg.amapKeyJs);
@@ -99,6 +112,7 @@ async function initInner() {
     $('config-hint').textContent = '未配置高德 Key:请在 data/config.json 填入 amapKeyJs(地图)与 amapKeyWeb(路径规划)';
     $('map').innerHTML = '<p class="muted map-empty">地图需要高德 JS API Key,填写后重启应用</p>';
   }
+  renderConfigGaps(cfg);
 
   // 出发站输入:输入 2+ 字后联想(规划页与推荐页共用同一实现)
   wireStationInput($('origin'), $('station-list'));
@@ -154,15 +168,19 @@ function drawRegion(region) {
 
 // 按区域重建徒步线路下拉(切区域必须重建,否则选项还是上个区域的)
 // 数据直接用启动时载入的 libTrails,不再每次走 IPC 往返
-function refreshTrailOptions(regionId, selectedId = '') {
+function refreshTrailOptions(regionId, selectedId = '', secondId = '') {
   $('trail').innerHTML = '<option value="">自动挑选</option>';
+  $('trail2').innerHTML = '<option value="">不加</option>';
   for (const t of libTrails) {
     if (t.regionId === regionId) {
       // 星数与文字必须同用人工评级;_grade.label 是指标建议级,只作详情页交叉校验展示
-      $('trail').append(new Option(`${t.name}(★${t.grade} ${GRADE_TEXT[t.grade] || ''})`, t.id));
+      const label = `${t.name}(★${t.grade} ${GRADE_TEXT[t.grade] || ''})`;
+      $('trail').append(new Option(label, t.id));
+      $('trail2').append(new Option(label, t.id));
     }
   }
   $('trail').value = selectedId || '';
+  $('trail2').value = secondId || '';
   updateTrailFitHint();
 }
 
@@ -179,6 +197,39 @@ function renderRegionBrief(region) {
       ? `<p><b>路况提示</b><ul>${region.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></p>`
       : '');
   el.hidden = false;
+}
+
+// 配置漂移提示:example 有而 config 没有的键位(主进程 readData('config') 附带 _gaps)。
+// ensureConfig 只在文件不存在时拷一次,此后 example 新增的键不会自动补进来——
+// 缺 flightCityPinyin 时「查机票」是点了必报错的那种,不能让它藏在文件里。
+// 这里只报不补:补配置等于改用户的文件,得他自己动手。
+function renderConfigGaps(cfg) {
+  const gaps = Array.isArray(cfg?._gaps) ? cfg._gaps : [];
+  if (!gaps.length) return;
+  const broken = gaps.filter((g) => g.severity === 'blocking').map((g) => g.path);
+  const defaulted = gaps.filter((g) => g.severity !== 'blocking').map((g) => g.path);
+  const parts = [];
+  if (broken.length) parts.push(`缺 ${broken.join('、')} —— 相关功能点了会直接报错`);
+  if (defaulted.length) parts.push(`缺 ${defaulted.join('、')} —— 正在用代码默认值,想改口径补进文件即可`);
+  const box = $('config-hint');
+  const span = document.createElement('span');
+  span.className = 'warn';
+  span.textContent = `${box.textContent ? ' | ' : ''}配置比 config.example.json 少项:${parts.join(';')}`;
+  box.append(span);
+}
+
+// 出发站 == 该区域铁路枢纽时,查出来的车次毫无意义(planner 会硬报错)。
+// 表单默认出发站写死「成都东」,一进来选川西就撞——所以选区域/改站名时就当场说破,别等点「生成行程」。
+function checkOriginVsHub() {
+  const box = $('left-msg');
+  const hub = regionCache[$('region').value]?.hub?.railStation;
+  const origin = $('origin').value.trim();
+  if (!hub || !origin || origin !== hub) {
+    if (box.dataset.hubWarn) { delete box.dataset.hubWarn; box.textContent = ''; }
+    return;
+  }
+  box.dataset.hubWarn = '1';
+  box.textContent = `出发站「${hub}」就是该区域的枢纽站,同站车次没有意义:请改成你真正出发的车站`;
 }
 
 // 高德 polyline("lng,lat;lng,lat;…")→ [[lng,lat],…],坏点直接丢
@@ -230,7 +281,8 @@ async function generateTrip() {
     startDate: $('start-date').value,
     days: Number($('days').value),
     headcount: Number($('headcount').value) || 1,
-    trailId: $('trail').value || null,
+    // 只交 trailIds 一个口径:老字段 trailId 与它并存会让"到底走几条线"各说一套
+    trailIds: [$('trail').value, $('trail2').value].filter(Boolean),
   };
   if (!input.originStation || !input.startDate) {
     $('left-msg').textContent = '请先填出发车站和日期';
@@ -268,7 +320,8 @@ function saveForm() {
   try {
     localStorage.setItem(FORM_KEY, JSON.stringify({
       region: $('region').value, origin: $('origin').value, date: $('start-date').value,
-      days: $('days').value, headcount: $('headcount').value, trailId: $('trail').value,
+      days: $('days').value, headcount: $('headcount').value,
+      trailIds: [$('trail').value, $('trail2').value].filter(Boolean),
     }));
   } catch { /* 存不了就算了,不影响主流程 */ }
 }
@@ -285,10 +338,14 @@ function restoreForm() {
     if (s.date) $('start-date').value = s.date;
     if (s.days) $('days').value = s.days;
     if (s.headcount) $('headcount').value = s.headcount;
-    if (s.trailId && [...$('trail').options].some((o) => o.value === s.trailId)) {
-      $('trail').value = s.trailId;
-      updateTrailFitHint();
+    const savedIds = Array.isArray(s.trailIds) ? s.trailIds : (s.trailId ? [s.trailId] : []);
+    if (savedIds[0] && [...$('trail').options].some((o) => o.value === savedIds[0])) {
+      $('trail').value = savedIds[0];
     }
+    if (savedIds[1] && [...$('trail2').options].some((o) => o.value === savedIds[1])) {
+      $('trail2').value = savedIds[1];
+    }
+    updateTrailFitHint();
     return Boolean(s.region || s.origin || s.date);
   } catch {
     return false;
@@ -464,6 +521,7 @@ function gearHtml(trip) {
 function tripOpsHtml() {
   return `<div class="trip-ops">
     <button id="trip-export">导出 Markdown</button>
+    <button id="trip-gpx" title="导成 GPX 带到手机/手表:山区没信号时按清单要求得有离线轨迹">导出 GPX</button>
     <button id="trip-print">打印</button></div>`;
 }
 
@@ -479,28 +537,61 @@ async function exportTripMd() {
   }
 }
 
+// 导出 GPX:轨迹由主进程用 lib/gpx.js 拼,这里只交 tripId(存档 id)。
+// 导出结果里的 note 要说破——没真实路线时导出的只是起点路点,不能让人以为拿到了路书。
+async function exportTripGpx() {
+  if (!currentTrip) return;
+  if (!gushan.exportGpx) { alert('当前环境(预览页)不支持导出 GPX'); return; }
+  try {
+    const res = await gushan.exportGpx(currentTrip.id);
+    if (res.canceled) return;
+    $('left-msg').textContent = `已导出 GPX:${res.filePath}`
+      + ` —— 轨迹点 ${res.points} 个${res.note ? `,${res.note}` : ''}`;
+  } catch (e) {
+    alert(`导出 GPX 失败:${e.message}`);
+  }
+}
+
 async function renderResult(trip) {
   currentTrip = trip;
   const html = [];
-  // 逐日天气对齐:徒步/休整日看宜否,驾车日只报天气本身(宜否是徒步口径,别张冠李戴)
+  // 逐日天气对齐:徒步/休整日看宜否,驾车日只报天气本身(宜否是徒步口径,别张冠李戴)。
+  // 优先用「当天所在节点」的预报(新档有 byDate);旧档没有就退回单点预报,并在下方明示用的是哪个点。
   const wxMap = new Map((trip.weather?.forecast || []).map((d) => [d.date, d]));
+  const byDate = trip.weather?.byDate || {};
   const wxChip = (date, type) => {
-    const wx = wxMap.get(date);
+    const wx = byDate[date] || wxMap.get(date);
     if (!wx) return '';
-    const tip = `${wx.label} ${wx.tempMin ?? '—'}~${wx.tempMax ?? '—'}℃ · 降水${wx.precipProb ?? '—'}% · 风${wx.windMax ?? '—'}km/h`;
+    const at = byDate[date]?.at ? `@${byDate[date].at} ` : '';
+    const tip = `${at}${wx.label} ${wx.tempMin ?? '—'}~${wx.tempMax ?? '—'}℃ · 降水${wx.precipProb ?? '—'}% · 风${wx.windMax ?? '—'}km/h`;
     if (type === 'drive') {
       return `<span class="day-wx v-info" title="${esc(tip)}">${esc(wx.label)} 雨${wx.precipProb ?? '—'}%</span>`;
     }
     return `<span class="day-wx v-${esc(wx.verdict)}" title="${esc(tip)}">${esc(wx.verdict)}</span>`;
   };
-  html.push(`<div class="day"><div class="day-head"><h3>${esc(trip.regionName)} · ${trip.input.days} 天</h3></div>${railHtml(trip.railOut, '去程火车', 'railOut')}</div>`);
+  const trailNames = (trip.trails && trip.trails.length ? trip.trails : (trip.trail ? [trip.trail] : []))
+    .map((t) => `${t.name} ★${t.grade}`).join(' + ');
+  html.push(`<div class="day"><div class="day-head"><h3>${esc(trip.regionName)} · ${trip.input.days} 天</h3>`
+    + `<span class="muted">${esc(trailNames)}${trip.trails && trip.trails.length > 1 ? `(${trip.trails.length} 条串联)` : ''}</span></div>`
+    + `${railHtml(trip.railOut, '去程火车', 'railOut')}</div>`);
+  // 里程口径:没配高德 Key 时全程是直线×1.3 估算,必须在最显眼处说清,不能只藏在预算备注里
+  if (trip.distanceEstimated) {
+    html.push('<p class="warn">里程为直线×1.3 估算(未配置高德 Key):里程只保证不低估、'
+      + '过路费按 0.45 元/km 估、地图无真实路线。填好 <code>data/config.json</code> 的 amapKeyWeb 后重新生成即为真实驾车路线。</p>');
+  }
+  // 票价为什么是估算的:接口失败 / 未查到车次 / 预售期外,三件事都得说清,别让人以为这条线不通
+  if (trip.railNote) html.push(`<p class="warn">${esc(trip.railNote)}</p>`);
+  if (trip.weather?.byDateError) {
+    html.push(`<p class="muted">逐日天气锚点未取到(${esc(trip.weather.byDateError)}),下面按徒步点`
+      + `「${esc(trip.weather.node)}」的单点预报展示。</p>`);
+  }
   const shift = suggestShiftStart(trip);
   for (const day of trip.schedule) {
     const [cls, name] = TAG[day.type] || ['tag-note', day.type];
     let body = '';
     if (day.type === 'drive') {
       body = `<table>${day.legs.map((l) =>
-        `<tr><td>${esc(l.from)}→${esc(l.to)}</td><td>${l.km}km / ${l.hours}h</td><td>油+过路 ¥${l.costs.driveTotal}</td></tr>`).join('')}</table>
+        `<tr><td>${esc(l.from)}→${esc(l.to)}</td><td>${l.km}km / ${l.hours}h${l.estimated ? ' <span class="muted">(估算里程)</span>' : ''}</td><td>油+过路 ¥${l.costs.driveTotal}</td></tr>`).join('')}</table>
         ${day.overKm ? '<p class="warn">当日驾车超过单日上限,行程偏紧</p>' : ''}
         ${day.lateArrival ? `<p class="warn">去程 ${esc(day.lateArrival.time)} 才到 ${esc(day.lateArrival.station)},首日驾车时间紧张,备好夜路预案</p>` : ''}
         ${day.earlyDepart ? `<p class="warn">回程 ${esc(day.earlyDepart.time)} 即发车,末日别排长驾,预留进站时间</p>` : ''}`;
@@ -518,7 +609,9 @@ async function renderResult(trip) {
         body += `<p class="hint">若整体改期 <b>${esc(shift.startDate)}</b>(${shift.earlier ? '提前' : '推后'} ${shift.days} 天),徒步日天气可到「${esc(shift.verdict)}」</p>`;
       }
     } else if (day.type === 'rest') {
-      body = '<p class="muted">机动休整:高反适应或天气避让,食宿照常</p>';
+      body = day.spare
+        ? '<p class="muted">机动/备用日:天数留白,给天气、路况或体力消耗;食宿照常</p>'
+        : '<p class="muted">机动休整:高反适应或天气避让,食宿照常</p>';
     } else {
       body = `<p class="warn">${esc(day.text)}</p>`;
     }
@@ -551,6 +644,8 @@ async function renderResult(trip) {
   }
   const exportBtn = $('trip-export');
   if (exportBtn) exportBtn.onclick = exportTripMd;
+  const gpxBtn = $('trip-gpx');
+  if (gpxBtn) gpxBtn.onclick = exportTripGpx;
   const printBtn = $('trip-print');
   if (printBtn) printBtn.onclick = () => window.print();
   renderWeather(trip.weather);
@@ -696,7 +791,8 @@ async function openArchive(id) {
   } else {
     $('region').value = trip.input.regionId;
     $('region').onchange();
-    await refreshTrailOptions(trip.input.regionId, trip.input.trailId || '');
+    const backIds = trip.input.trailIds || (trip.input.trailId ? [trip.input.trailId] : []);
+    await refreshTrailOptions(trip.input.regionId, backIds[0] || '', backIds[1] || '');
     if (trip.input.startDate) $('start-date').value = trip.input.startDate;
     if (trip.input.days) $('days').value = trip.input.days;
     if (trip.input.headcount) $('headcount').value = trip.input.headcount;
@@ -792,18 +888,22 @@ async function loadLibraryData() {
   libTrails = Object.entries(trails).map(([id, t]) => ({ id, ...t }));
   const keepProvince = $('lib-province').value;
   const keepType = $('lib-type').value;
+  const keepAlt = $('lib-alt').value;
   $('lib-province').innerHTML = '<option value="">全部省份</option>';
   $('lib-type').innerHTML = '<option value="">全部类型</option>';
-  // 下拉选项由数据生成,新增省份/类型不用改 UI
+  $('lib-alt').innerHTML = '<option value="">全部海拔</option>';
+  // 下拉选项由数据生成,新增省份/类型不用改 UI;海拔档位由 lib 生成,改分档口径也不用改 UI
   for (const p of [...new Set(libTrails.map((t) => t.province))].sort()) $('lib-province').append(new Option(p, p));
   for (const ty of [...new Set(libTrails.map((t) => t.type))].sort()) $('lib-type').append(new Option(ty, ty));
+  for (const b of ALT_BAND_LIST) $('lib-alt').append(new Option(b.label, b.key));
   if ([...$('lib-province').options].some((o) => o.value === keepProvince)) $('lib-province').value = keepProvince;
   if ([...$('lib-type').options].some((o) => o.value === keepType)) $('lib-type').value = keepType;
+  if ([...$('lib-alt').options].some((o) => o.value === keepAlt)) $('lib-alt').value = keepAlt;
 }
 
 async function initLibrary() {
   await loadLibraryData();
-  for (const id of ['lib-search', 'lib-province', 'lib-grade', 'lib-type', 'lib-status', 'lib-mark', 'lib-sort']) {
+  for (const id of ['lib-search', 'lib-province', 'lib-grade', 'lib-type', 'lib-alt', 'lib-status', 'lib-mark', 'lib-sort']) {
     $(id).addEventListener('change', renderLibrary);
     // 搜索框逐键 input 会全量重建整个路线库卡片,防抖后再渲染;其余控件数据量小可即时
     if (id !== 'lib-search') $(id).addEventListener('input', renderLibrary);
@@ -836,6 +936,7 @@ function renderLibrary() {
   const province = $('lib-province').value;
   const grade = $('lib-grade').value;
   const type = $('lib-type').value;
+  const alt = $('lib-alt').value;
   const status = $('lib-status').value;
   const markFilter = $('lib-mark').value;
   const hitStatus = (t) => !status
@@ -848,6 +949,7 @@ function renderLibrary() {
     (!province || t.province === province)
     && (!grade || String(t.grade) === grade)
     && (!type || t.type === type)
+    && (!alt || hitAltBandOf(t, alt))
     && hitStatus(t)
     && hitMark(t)
     && (!kw || `${t.name}${t.province}${t.area}${t.summary}`.toLowerCase().includes(kw)));
@@ -855,6 +957,8 @@ function renderLibrary() {
   const sorters = {
     grade: (a, b) => b.grade - a.grade || b._grade.total - a._grade.total || a.name.localeCompare(b.name, 'zh'),
     climb: (a, b) => b.climbM - a.climbM,
+    // 海拔排序走 lib/filters.js 的 byAlt:缺 maxAltM 的行沉底,不像 climb 那样让脏值长出 NaN 序
+    alt: byAltDesc,
     days: (a, b) => b.days - a.days || b.distanceKm - a.distanceKm,
     name: (a, b) => a.name.localeCompare(b.name, 'zh'),
   };
@@ -914,6 +1018,89 @@ function wireMarkButtons(root) {
       await saveMarks();
     };
   }
+  // 实测量与 GPX 导入:与「想去/走过」同一入口区,数据分别落 marks.json / trails.json
+  for (const btn of root.querySelectorAll('[data-actual]')) {
+    btn.onclick = () => recordActuals(btn.dataset.actual);
+  }
+  for (const btn of root.querySelectorAll('[data-gpx]')) {
+    btn.onclick = () => importGpxFor(btn.dataset.gpx, btn);
+  }
+}
+
+// 记实走:把实测量(天数/里程/爬升)记进 marks.json,与线路库标称值对比。
+// 三项逗号分隔,留空或 `-` 表示这项不动;填 0 表示清除这项。
+// 不要求一次填全——走过一条线能记住的往往只有其中一个数。
+const ACTUAL_KEYS = ['actualDays', 'actualDistanceKm', 'actualClimbM'];
+async function recordActuals(id) {
+  const mk = marks[id] || {};
+  const input = prompt(
+    '实走记录:天数, 里程km, 爬升m(留空或 - 表示不改该项;填 0 清除该项)\n'
+    + `当前:${[mk.actualDays, mk.actualDistanceKm, mk.actualClimbM].map((v) => v ?? '—').join(' , ')}`,
+    [mk.actualDays ?? '', mk.actualDistanceKm ?? '', mk.actualClimbM ?? ''].join(', '));
+  if (input === null) return;
+  const parts = input.split(/[,，]/).map((s) => s.trim());
+  if (parts.length !== 3) { alert('需要三项:天数, 里程km, 爬升m'); return; }
+  const next = { ...mk };
+  let changed = false;
+  for (let i = 0; i < 3; i++) {
+    const p = parts[i];
+    if (!p || p === '-') continue;
+    if (p === '0') { if (next[ACTUAL_KEYS[i]] !== undefined) { delete next[ACTUAL_KEYS[i]]; changed = true; } continue; }
+    const v = Number(p);
+    if (!Number.isFinite(v) || v <= 0) { alert(`${ACTUAL_KEYS[i]} 需要正数或 0,收到「${p}」`); return; }
+    next[ACTUAL_KEYS[i]] = v;
+    changed = true;
+  }
+  if (!changed) return; // 什么都没改就不写盘,也别顺手把「走过」给标上
+  if (!next.doneAt) next.doneAt = todayLocal(); // 记了实测量就说明走过,不用他再点一次
+  marks[id] = next;
+  await saveMarks();
+}
+
+// 导入 GPX:主进程选文件并算好「实测 vs 标称」,这里负责摊开对比表并要一次确认。
+// 有 review 项时即便确认也不写(主进程挡着),界面把原因原样转达。
+async function importGpxFor(id, btn) {
+  if (!gushan.importGpx) { alert('当前环境(预览页)不能选文件'); return; }
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '解析中…';
+  let res;
+  try {
+    res = await gushan.importGpx({ trailId: id });
+  } catch (e) {
+    alert(`导入失败:${e.message}`);
+    return;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+  if (!res || res.canceled) return;
+  if (res.error) { alert(`这个 GPX 不能用:${res.error}(有效点 ${res.points},丢弃 ${res.skipped})`); return; }
+  const trail = libTrails.find((t) => t.id === id) || {};
+  const m = res.measured || {};
+  const line = (key, unit) => `${key === 'distanceKm' ? '里程' : key === 'climbM' ? '爬升' : '最高海拔'}:`
+    + `标称 ${trail[key] ?? '—'}${unit} / 实测 ${m[key] ?? '未测出'}${unit}`;
+  const review = (res.d?.review || [])
+    .map((r) => `⚠ ${r.field} 差 ${r.diffPct}%(标称 ${r.planned} vs 实测 ${r.measured})`).join('\n');
+  const will = (res.willWrite || []).join('、') || '无';
+  const ok = confirm(`解析到 ${m.points} 个轨迹点\n\n`
+    + `${['distanceKm', 'climbM', 'maxAltM'].map((k, i) => line(k, ['km', 'm', 'm'][i])).join('\n')}\n\n`
+    + `将写入:${will}\n`
+    + (review ? `\n${review}\n—— 差超阈值,按纪律不自动覆盖,即使确认也不写(请人工裁决)\n` : '')
+    + `\n确认写入 data/trails.json?`);
+  if (!ok) return;
+  let done;
+  try {
+    done = await gushan.importGpx({ token: res.token, confirmed: true });
+  } catch (e) {
+    alert(`写入失败:${e.message}`);
+    return;
+  }
+  if (done.blocked) { alert(`未写入:${done.blocked}`); return; }
+  // 标称值变了 → 重载线路库(卡片指标、评级、体能匹配全部跟着重算),否则界面还在显示旧数
+  await loadLibraryData();
+  renderLibrary();
+  alert(`已写入 ${done.wrote.join('、')}:${done.wrote.map((k) => `${k}=${done.apply[k]}`).join(' ')}`);
 }
 
 async function saveMarks() {
@@ -956,24 +1143,51 @@ function gearPreviewHtml(t) {
   return `<p class="muted gear-preview"><b>行前要带:</b>${shown}${more}</p>`;
 }
 
-// 落地明细段:住宿+餐饮+门票,口径来自 GushanLib.recommend.costBreakdown
-function costLandPart(t, bd) {
-  return `住宿 ¥${bd.lodging} + 餐饮 ¥${bd.food} + ${t.tickets == null ? '门票未标按 0' : `门票 ¥${bd.tickets}`} = 落地 ¥${bd.total}`;
+// 卡片花费的口径参数:推荐页三个控件优先,没渲染出来(如预览页)才退回规划页的日期与人数。
+// 日期决定季节系数、人数决定房间数、档次决定住宿倍数——这就是"数字会跟着你改的东西"。
+function costInputs() {
+  return {
+    date: $('rec-date')?.value || $('start-date')?.value || null,
+    headcount: toPositive($('rec-headcount')?.value) || 1,
+    tier: $('rec-tier')?.value || '舒适',
+  };
 }
 
-// 卡片的人均花费行,路线库与推荐结果共用。推荐结果已查到的火车价由 _transport 带入;
-// 路线库卡片展开后再按出发站补估(见 wireTransportLookups)。tp.note 是 12306 网络源,入 HTML 前过 esc
+// 分项一行:未知项写「未含」,绝不写成 ¥0 冒充已知(INSTINCTS:amount null 不是 0)
+function costItemChip(it) {
+  const val = it.perPerson === null ? '<b>未含</b>' : `¥${it.perPerson}`;
+  return `<span class="qf" title="${esc(it.note)}"><b>${esc(it.name)}</b>${val}</span>`;
+}
+
+// 季节/档次注脚:让用户看得见这个数被哪一档、哪一路命中项乘过
+function costFactorNote(bd) {
+  const s = bd.season || {};
+  const parts = [];
+  if (s.lodging !== 1) parts.push(`住 ×${s.lodging}(${esc(s.lodgingFrom)})`);
+  if (s.food !== 1) parts.push(`餐 ×${s.food}(${esc(s.foodFrom)})`);
+  if (bd.unknownCount) parts.push(`${bd.unknownCount} 项未含`);
+  for (const n of bd.notes || []) parts.push(esc(n));
+  return parts.length ? ` <span class="muted">(${parts.join(';')})</span>` : '';
+}
+
+// 卡片的人均花费行,路线库与推荐结果共用。公式只在 lib/budget.js 一份。
+// 推荐结果已查到的火车价由 _transport 带入;路线库卡片展开后再按出发站补估(见 wireTransportLookups)。
+// tp.note 是 12306 网络源,入 HTML 前过 esc
 function costLineHtml(t) {
-  const bd = costBreakdownOf(t, appCfg);
-  const landPart = costLandPart(t, bd);
+  const bd = budgetLand(t, costInputs(), appCfg);
+  const chips = `<span class="qf-row">${bd.items.map(costItemChip).join('')}</span>`;
+  const factor = costFactorNote(bd);
   if (t._transport) {
     const tp = t._transport;
-    return `<p class="cost-est" data-cost="${esc(t.id)}" data-land="${bd.total}" data-transport-done="1">${esc(`人均约 ¥${bd.total + tp.perPerson}(${landPart} + 往返火车约 ¥${tp.perPerson},${tp.note})`)}</p>`;
+    return `<p class="cost-est" data-cost="${esc(t.id)}" data-land="${bd.total}" data-transport-done="1">`
+      + `${esc(`人均约 ¥${bd.total + tp.perPerson}(落地 ¥${bd.total} + 往返火车约 ¥${tp.perPerson},${tp.note})`)}`
+      + `${factor}${chips}</p>`;
   }
   const tpNote = currentOrigin()
     ? ';往返火车未含(展开后按出发站补估)'
     : ';未含往返大交通,填出发站可估';
-  return `<p class="cost-est" data-cost="${esc(t.id)}" data-land="${bd.total}">${esc(`人均落地约 ¥${bd.total}(${landPart}`)}<span data-tp>${esc(tpNote)}</span>${esc(')')}</p>`;
+  return `<p class="cost-est" data-cost="${esc(t.id)}" data-land="${bd.total}">`
+    + `${esc(`人均落地约 ¥${bd.total}`)}<span data-tp>${esc(tpNote)}</span>${factor}${chips}</p>`;
 }
 
 // 卡片展开是显式动作,往返火车估算在此按需查询(主进程会话内按枢纽缓存),不拖累列表首屏
@@ -1019,6 +1233,49 @@ async function lookupTransport(line, origin, force) {
   line.textContent = `人均约 ¥${land + res.perPerson}(落地 ¥${land} + 往返火车约 ¥${res.perPerson},${res.note})`;
 }
 
+// 风险出处:口径在 lib/risknotes.js(与单测同源)。有出处就写出处,填不出就明说「未核实」;
+// 格式不对的条目必须留一行脏提示——否则"数据坏了"会伪装成"这条线没风险"。
+function riskNotesHtml(t) {
+  const { items, dirty } = riskNotesOf(t);
+  const lines = items.map((r) => `<p class="muted">· ${esc(r.text)} —— ${
+    r.verified ? `出处:${esc(r.source)}${r.year ? `(${r.year})` : ''}` : '未核实(缺出处)'}</p>`);
+  if (dirty) {
+    lines.push(`<p class="warn">· 风险出处有 ${dirty} 条格式不对,未显示——请核对 data/trails.json 的 riskNotes</p>`);
+  }
+  return lines.length ? '<p><b>风险出处:</b></p>' + lines.join('') : '';
+}
+
+// 实走 vs 规划:口径在 lib/actuals.js(与单测同源)。只在记过实测量时出现,不给 191 张老卡加噪音。
+// 差值超阈值就标「待复核」——这条线库里的标称值可能是错的,而不是"我走多了"。
+function actualLineHtml(t) {
+  const mk = marks[t.id] || {};
+  const { rows, bad } = actualVsPlannedOf(t, mk);
+  const lines = rows.map((r) => `<p class="muted">· ${esc(r.label)}:规划 ${r.planned}${r.unit}`
+    + ` / 实走 ${r.actual}${r.unit} —— ${r.diffPct > 0 ? '+' : ''}${r.diffPct}%`
+    + `${r.review ? '<b>(差得多,待复核)</b>' : ''}</p>`);
+  if (bad.length) {
+    lines.push(`<p class="warn">· 实走数据有 ${bad.length} 项不是正数(${bad.map(esc).join(',')}),`
+      + '已忽略——请核对 data/marks.json</p>');
+  }
+  if (lines.length) return '<p><b>实走记录:</b></p>' + lines.join('');
+  // 走过但没记实测量:给按钮,不再让人去手改 data/marks.json
+  if (mk.doneAt) {
+    return '<p><b>实走记录:</b> <span class="muted">已走过,未记实测量——点下方「记实走」'
+      + '(或「导入 GPX」)即可与规划值对比。</span></p>';
+  }
+  return '';
+}
+
+// 一次性开销清单:只列"要不要准备",不给金额(那些价没有可查证的公开口径,编一个数比不写更糟)。
+// 触发规则在 lib/budget.js 的 oneTimeCosts,与单测同源。
+function oneTimeHtml(t) {
+  const items = oneTimeOf(t, { date: costInputs().date });
+  if (!items.length) return '';
+  return '<details class="gear"><summary>一次性开销(要准备什么)'
+    + '<span class="muted">只列要不要准备,不给金额;这些价按当地现询</span></summary>'
+    + `<ul>${items.map((i) => `<li><b>${esc(i.item)}</b><span class="muted">${esc(i.reason)} · ${esc(i.amountNote)}</span></li>`).join('')}</ul></details>`;
+}
+
 function routeHtml(t) {
   const g = t._grade;
   const statusCls = { 开放: 'st-open', 部分管控: 'st-warn', 管控: 'st-warn', 禁入: 'st-bad', 关闭: 'st-bad' }[t.status];
@@ -1047,17 +1304,24 @@ function routeHtml(t) {
         <span>爬升 ${t.climbM}m</span><span>最高 ${t.maxAltM}m</span>${t.bestSeason ? `<span>${esc(t.bestSeason)}</span>` : ''}</div>
       <p>${esc(t.summary)}</p>
       ${t.statusNote ? `<p class="warn">${esc(t.statusNote)}</p>` : ''}
+      ${permitNoticeOf(t) ? `<p class="muted">${esc(permitNoticeOf(t))}</p>` : ''}
       ${gradeLine}
       ${fitLineHtml(fit)}
       ${gradeHint}
       ${quickFactsHtml(t)}
+      ${actualLineHtml(t)}
       ${t.risks ? `<p><b>风险:</b>${t.risks.map(esc).join(' / ')}</p>` : ''}
+      ${riskNotesHtml(t)}
       ${t.supplies ? `<p><b>补给:</b>${esc(t.supplies)}</p>` : ''}
       ${gearPreviewHtml(t)}
+      ${oneTimeHtml(t)}
       ${costLineHtml(t)}
       <p class="mark-ops">
         <button class="mark-btn${mk.wanted ? ' on' : ''}" data-want="${t.id}">${mk.wanted ? '★ 已在想去' : '☆ 想去'}</button>
         <button class="mark-btn${mk.doneAt ? ' on' : ''}" data-done="${t.id}">${mk.doneAt ? `✓ 已走过 ${String(mk.doneAt).slice(5)}` : '标记走过'}</button>
+        <button class="mark-btn${mk.actualDistanceKm || mk.actualDays || mk.actualClimbM ? ' on' : ''}" data-actual="${t.id}"
+          title="记下实走的天数/里程/爬升,与线路库标称值对比">记实走</button>
+        <button class="mark-btn" data-gpx="${t.id}" title="选一个 GPX(两步路/六只脚/Strava 导出),用它量出的实测量校标称值;差太多的不写,要人判">导入 GPX</button>
       </p>
       ${t.regionId
         ? `<p><button class="lib-plan" data-plan="${t.id}|${t.regionId}">用这条线规划行程</button></p>`
@@ -1106,11 +1370,22 @@ function initRecommend() {
   for (const id of ['rec-budget', 'rec-days', 'rec-origin']) {
     $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') runRecommend(); });
   }
+  // 日期/人数/档次只改花费口径,但结果行与分项都得跟着变,所以同样即时重算(与难度档一致)
+  for (const id of ['rec-date', 'rec-tier', 'rec-headcount']) {
+    $(id).addEventListener('change', () => {
+      const hasCriteria = toPositive($('rec-budget').value) !== null
+        || recSelected.size > 0 || $('rec-province').value || $('rec-origin').value.trim();
+      if (hasCriteria) runRecommend();
+    });
+  }
   // 出发站与规划页共用同一份记忆:规划页填过就直接带出来,不用重填
   try {
     const saved = JSON.parse(localStorage.getItem(FORM_KEY) || 'null');
     if (saved?.origin) $('rec-origin').value = saved.origin;
     if (saved?.recGrade) $('rec-grade').value = String(saved.recGrade);
+    if (saved?.recDate) $('rec-date').value = saved.recDate;
+    if (saved?.recHeadcount) $('rec-headcount').value = String(saved.recHeadcount);
+    if (saved?.recTier) $('rec-tier').value = saved.recTier;
   } catch { /* 记忆坏了当没填 */ }
   wireStationInput($('rec-origin'), $('rec-station-list'));
 }
@@ -1128,7 +1403,13 @@ async function runRecommend() {
     $('rec-msg').textContent = '填一个人均预算或出发站,点几个想看的景色,或限定省份,至少给一个方向';
     return;
   }
-  const input = { budget, maxDays, scenery, province, originStation, gradeMax };
+  const input = {
+    budget, maxDays, scenery, province, originStation, gradeMax,
+    // 花费口径三要素:日期(季节系数)/人数(房间数)/档次(住宿倍数)
+    date: $('rec-date').value || null,
+    headcount: toPositive($('rec-headcount').value) || 1,
+    tier: $('rec-tier').value || '舒适',
+  };
   lastRecInput = input;
   if (originStation) $('rec-msg').textContent = '正在按出发站估算往返火车实价…(每个枢纽只查一次,首条推荐稍慢)';
   $('rec-go').disabled = true; // 推荐期间禁点:连点会对 12306 并发两轮估算
@@ -1140,10 +1421,13 @@ async function runRecommend() {
     $('rec-msg').textContent = `推荐失败:${e.message}`;
   } finally {
     $('rec-go').disabled = false;
-    // 难度档位记住:下次进来还是同一档,不用重新选
+    // 难度档与花费口径记住:下次进来还是同一套条件,不用重新选
     try {
       const saved = JSON.parse(localStorage.getItem(FORM_KEY) || 'null') || {};
       saved.recGrade = $('rec-grade').value;
+      saved.recDate = $('rec-date').value;
+      saved.recHeadcount = $('rec-headcount').value;
+      saved.recTier = $('rec-tier').value;
       localStorage.setItem(FORM_KEY, JSON.stringify(saved));
     } catch { /* 记忆写不进去不影响推荐 */ }
   }
@@ -1155,12 +1439,16 @@ function toPositive(v) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function criteriaText({ budget, maxDays, scenery, province, gradeMax }, gate = null) {
+function criteriaText({ budget, maxDays, scenery, province, gradeMax, date, headcount, tier }, gate = null) {
   const parts = [];
   if (scenery.length) parts.push(`景色「${scenery.join('、')}」`);
   if (province) parts.push(`限 ${province}`);
   if (budget) parts.push(`人均预算 ¥${budget}`);
   if (maxDays) parts.push(`≤${maxDays} 天`);
+  // 花费口径三要素要写在结果行上:否则用户改了日期/人数看到数字变了,却不知道是它变的
+  parts.push(date ? `${date} 出行` : '未填日期(中性基准)');
+  if (Number(headcount) > 1) parts.push(`${headcount} 人同行`);
+  if (tier && tier !== '舒适') parts.push(`${tier}档`);
   // 难度闸门:显式选的写「★N 以内」;自动收窄的写清是体能给的,让用户知道结果为什么变少
   if (Number.isFinite(gradeMax)) parts.push(`★${gradeMax} 以内`);
   else if (gate?.auto && Number.isFinite(gate.gradeMax)) parts.push(`体能上限★${gate.gradeMax} 以内`);
@@ -1169,9 +1457,8 @@ function criteriaText({ budget, maxDays, scenery, province, gradeMax }, gate = n
 
 function renderRecommend(list, input) {
   const gate = list.__gate || null;
-  const caliber = input.originStation
-    ? '花费含往返火车实价估算(去程价×2)+ 吃住门票'
-    : '花费是吃住+门票的落地估算,未含往返大交通';
+  const caliber = `落地估算按「${input.date || '未填日期(中性基准)'} / ${input.headcount || 1} 人 / ${input.tier || '舒适'}档」`
+    + (input.originStation ? ',花费含往返火车实价估算(去程价×2)' : ',未含往返大交通');
   const gateNote = gate?.auto && Number.isFinite(gate.gradeMax)
     ? ` · 已按 ${gate.bodyHint || '体能'}自动排除更高难度`
     : '';
@@ -1194,9 +1481,9 @@ function recCardHtml(r, i, input) {
       : '<span class="status st-open">预算内</span>')
     : '';
   const hits = r.hits.length ? `<span class="rec-hit">景色命中:${esc(r.hits.join('、'))}</span>` : '';
-  // 门票未标注要显式挂出来:costBreakdown 按 0 计,不说就等于默默低估预算
+  // 门票没标就要显式挂出来:现在未知项不进合计(旧口径按 0 计),不说就等于让人以为不用买票
   const tk = t.tickets == null
-    ? `<span class="status st-bad" title="线路库未标注门票数据，此处按 0 元计，实际花费更高">门票未标注</span>` : '';
+    ? `<span class="status st-bad" title="线路库未标注门票数据,合计里这一项按未含处理(不是 0 元),实际花费更高">门票未标注</span>` : '';
   // 规划器未覆盖:不能一键生成行程,但路线本身仍然可选——说清原因,不静默没按钮
   const noPlan = (t.regionId && t.node)
     ? ''

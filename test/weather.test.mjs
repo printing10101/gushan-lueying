@@ -93,3 +93,50 @@ test('forecast:坐标非法响亮报错,days 坏值收敛为 1 天', async () =>
     globalThis.fetch = realFetch;
   }
 });
+
+// ---- 多点:逐日天气锚点要用一次请求取多个坐标 ----
+// 为什么:行程里 711km 的驾车日与徒步日不在同一个地方,单点预报会让逐日 chip 对不上位置;
+// 而"每个点各发一次请求"既慢又像在刷接口。
+test('forecastMany:一次请求带多组经纬度,返回与输入同序', async () => {
+  const { forecastMany } = require('./lib/weather.js');
+  const realFetch = globalThis.fetch;
+  try {
+    let url = '';
+    const mk = (tmax) => ({ elevation: 1200, daily: { time: ['2026-10-10', '2026-10-11'], weather_code: [0, 61],
+      temperature_2m_max: [tmax, tmax], temperature_2m_min: [5, 6], precipitation_probability_max: [0, 80], wind_speed_10m_max: [5, 9] } });
+    // 多点时官方返回数组;单点返回对象——两种形状都必须能认
+    globalThis.fetch = async (u) => { url = String(u); return { ok: true, json: async () => [mk(20), mk(30)] }; };
+    const many = await forecastMany([{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 }], 2);
+    assert.equal(many.length, 2);
+    assert.equal(many[0].name, 'A');
+    assert.equal(many[1].name, 'B');
+    assert.equal(many[0].forecast[0].tempMax, 20);
+    assert.equal(many[1].forecast[0].tempMax, 30, '顺序错位会让两地天气互换');
+    assert.match(url, /latitude=30,31&longitude=100,101/, `URL 应带两组坐标: ${url}`);
+    assert.match(url, /forecast_days=2/);
+
+    globalThis.fetch = async () => ({ ok: true, json: async () => mk(18) }); // 单点形状
+    const one = await forecastMany([{ name: 'A', lng: 100, lat: 30 }], 2);
+    assert.equal(one[0].forecast[0].tempMax, 18);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('forecastMany:空输入不发请求;坏坐标/非 JSON/缺 daily 各自响亮报错', async () => {
+  const { forecastMany } = require('./lib/weather.js');
+  const realFetch = globalThis.fetch;
+  try {
+    let called = 0;
+    globalThis.fetch = async () => { called += 1; return { ok: true, json: async () => ({ daily: { time: ['2026-10-10'] } }) }; };
+    assert.deepEqual(await forecastMany([], 3), [], '没有点就不该打接口');
+    assert.equal(called, 0);
+    await assert.rejects(forecastMany([{ name: 'X', lng: NaN, lat: 30 }], 3), /坐标非法/);
+    globalThis.fetch = async () => ({ ok: false, status: 500 });
+    await assert.rejects(forecastMany([{ name: 'X', lng: 100, lat: 30 }], 3), /HTTP 500/);
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ elevation: 0 }) });
+    await assert.rejects(forecastMany([{ name: 'X', lng: 100, lat: 30 }], 3), /缺少 daily 数据/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

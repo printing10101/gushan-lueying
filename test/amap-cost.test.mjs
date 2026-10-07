@@ -106,3 +106,34 @@ test('drivingRoute:同一对节点只查一次高德,反向 leg 独立,失败不
     amap.clearRouteCache();
   }
 });
+
+// ---- 未配 Key 的估算口径(与 planner.buildLegs 共用同一个系数) ----
+test('estimatedRoute:里程 = 直线×系数(只保证不低估),过路费交回 calcCosts 估', () => {
+  const A = { lng: 100, lat: 30 };
+  const B = { lng: 101.5, lat: 31 };
+  const flat = amap.haversineKm(A, B);
+  const r = amap.estimatedRoute(A, B);
+  assert.ok(r.distanceKm > flat, '估算必须不低于直线距离');
+  assert.equal(r.distanceKm, flat * amap.LOOP_FACTOR);
+  assert.equal(r.tolls, null, '给 null 才能走 calcCosts 既有的 0.45 元/km 估算分支');
+  assert.equal(r.path, '', '没有真实路线可画');
+  assert.equal(r.estimated, true);
+  assert.ok(r.durationHours > 0 && Number.isFinite(r.durationHours));
+  // 估算不能替坏坐标遮丑:regions.json 填错要当场炸
+  assert.throws(() => amap.estimatedRoute(undefined, B), /坐标非法/);
+  assert.throws(() => amap.estimatedRoute(A, { lng: NaN, lat: 1 }), /坐标非法/);
+});
+
+test('hasKey:按 config 的 amapKeyWeb 判定,空串/缺文件都算没配', () => {
+  const realRead = store.read;
+  try {
+    store.read = () => ({ amapKeyWeb: '' });
+    assert.equal(amap.hasKey(), false);
+    store.read = () => ({ amapKeyWeb: 'k' });
+    assert.equal(amap.hasKey(), true);
+    store.read = () => null;
+    assert.equal(amap.hasKey(), false);
+  } finally {
+    store.read = realRead;
+  }
+});

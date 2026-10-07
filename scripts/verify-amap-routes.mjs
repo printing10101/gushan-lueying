@@ -42,13 +42,9 @@ const amap = require('../lib/amap');
 
 // 高德 Web 服务有 QPS 限制(个人 Key 通常 3 次/秒),串行 + 间隔,别并发打。
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const R = 6371;
-const rad = (x) => (x * Math.PI) / 180;
-function estimateKm(a, b) {
-  const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2
-    + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lng - a.lng) / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h)) * 1.3;
-}
+// 估算口径单一来源:lib/amap.js。这里以前手抄了一份 haversine×1.3,
+// 抄本一旦和 planner 实际用的系数漂移,「估算 vs 真实」差距表就在骗人。
+const estimateKm = (a, b) => amap.haversineKm(a, b) * amap.LOOP_FACTOR;
 
 const regions = JSON.parse(fs.readFileSync(REGIONS, 'utf8'));
 const targets = ONLY ? { [ONLY]: regions[ONLY] } : regions;

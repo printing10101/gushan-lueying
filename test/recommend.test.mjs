@@ -1,7 +1,8 @@
 import { createRequire } from 'module';
 const require = createRequire(new URL('../package.json', import.meta.url));
 const store = require('./lib/store.js');
-const { SCENERY, costPerPerson, costBreakdown, scoreTrail, rank, enrichWithTransport, hubTarget, stayCfgFor, regionStayMap } = require('./lib/recommend.js');
+const { SCENERY, costPerPerson, scoreTrail, rank, enrichWithTransport, hubTarget, stayCfgFor, regionStayMap } = require('./lib/recommend.js');
+const budget = require('./lib/budget.js');
 const test = require('node:test');
 const assert = require('node:assert');
 
@@ -14,32 +15,23 @@ test('景色词表:非空、无重复', () => {
   assert.equal(new Set(SCENERY).size, SCENERY.length);
 });
 
-test('人均花费估算:口径透明可复算(房费均摊 + 餐标 + 门票)', () => {
+test('人均花费走 budget 的公式:2 人同行与旧口径一致', () => {
   // 7 天:6 晚 × ¥200 ÷ 2 人 + 7 天 × ¥80 + 门票 ¥60 = 600 + 560 + 60
-  assert.equal(costPerPerson({ days: 7, tickets: 60 }, CFG), 1220);
-  // 门票未标注按 0 计,不允许 NaN
-  assert.equal(costPerPerson({ days: 3 }, CFG), 2 * 200 / 2 + 3 * 80);
-  // config 缺字段时用与 planner.stayBudget 相同的兜底值
-  assert.equal(costPerPerson({ days: 2 }, {}), 1 * 200 / 2 + 2 * 80);
+  assert.equal(costPerPerson({ days: 7, tickets: 60 }, CFG, { headcount: 2 }), 1220);
+  // 1 人:整间房不能被 ÷2 —— 这是设计稿第 5 节点名的行为变化(修的是推荐页算便宜了)
+  assert.equal(costPerPerson({ days: 7, tickets: 60 }, CFG, { headcount: 1 }), 1200 + 560 + 60);
+  // config 缺字段时用与 planner 相同的兜底值
+  assert.equal(costPerPerson({ days: 2 }, {}, { headcount: 2 }), 1 * 200 / 2 + 2 * 80);
 });
 
-test('一日线住宿按 1 晚计(不再算 0 晚)', () => {
-  // 1 天线人在景区附近过夜是实打实开支,算 0 晚会让入门者最常选的当日线系统性低估
-  const bd = costBreakdown({ days: 1 }, CFG);
-  assert.equal(bd.lodging, 200 / 2);
-  assert.equal(bd.total, 200 / 2 + 80);
-  // 多日线仍是 days-1 晚,口径不因这次修正而改动
-  assert.equal(costBreakdown({ days: 7 }, CFG).lodging, 6 * 200 / 2);
-  assert.equal(costBreakdown({ days: 3 }, CFG).lodging, 2 * 200 / 2);
-  assert.equal(costBreakdown({ days: 2 }, CFG).lodging, 1 * 200 / 2);
-});
-
-test('门票未标注时 ticketsUnknown 为 true,不静默按 0', () => {
-  assert.equal(costBreakdown({ days: 2 }, CFG).ticketsUnknown, true);
-  assert.equal(costBreakdown({ days: 2, tickets: 0 }, CFG).ticketsUnknown, false);
-  assert.equal(costBreakdown({ days: 2, tickets: 60 }, CFG).ticketsUnknown, false);
-  // 未标注仍按 0 参与求和(不编造金额),但必须带标记让 UI 能言明
-  assert.equal(costBreakdown({ days: 2 }, CFG).total, 100 + 160);
+test('花费随日期/人数/档次变(旧公式三样都不吃,数字才会一动不动)', () => {
+  const t = trail({ days: 1 }); // 1 天无门票线:旧公式对全库 25 条都算出同一个 ¥180
+  const base = costPerPerson(t, CFG, { headcount: 1 });
+  const 国庆 = costPerPerson(t, { ...CFG, seasonality: { holidays: [{ label: '国庆', from: '2026-10-01', to: '2026-10-07', lodging: 1.8, food: 1.2 }] } }, { headcount: 1, date: '2026-10-02' });
+  assert.ok(国庆 > base, `旺季应更贵:${国庆} vs ${base}`);
+  assert.equal(base, 280, '默认(1 人/舒适/无日期)= 住宿 200 + 餐饮 80,验收第 7 条');
+  assert.equal(costPerPerson(t, CFG, { headcount: 2 }), 100 + 80, '2 人同行住宿减半');
+  assert.equal(costPerPerson(t, CFG, { headcount: 1, tier: '经济' }), 120 + 80, '经济档 ×0.6');
 });
 
 test('难度是硬闸门:gradeMax/gradeMin 之外一律不推', () => {
@@ -153,15 +145,15 @@ test('rank:province 硬过滤,excludeIds 剔除走过的', () => {
 
 // ---------- 花费明细与往返大交通富化 ----------
 
-test('costBreakdown:分项与总额一致,门票未标按 0', () => {
-  // 7 天:6 晚 × ¥200 ÷ 2 人 + 7 天 × ¥80 + 门票 ¥60
-  assert.deepEqual(costBreakdown({ days: 7, tickets: 60 }, CFG),
-    { lodging: 600, food: 560, tickets: 60, ticketsUnknown: false, total: 1220 });
-  assert.deepEqual(costBreakdown({ days: 3 }, CFG),
-    { lodging: 200, food: 240, tickets: 0, ticketsUnknown: true, total: 440 });
-  // 分项之和恒等于总额(新字段 ticketsUnknown 不参与求和,只是给 UI 的标记)
-  const bd = costBreakdown({ days: 1, tickets: 55 }, CFG);
-  assert.equal(bd.lodging + bd.food + bd.tickets, bd.total);
+test('分项之和 = 合计,未知项不进合计(公式已收敛到 lib/budget.js,这里验接入)', () => {
+  const bd = budget.landBudget({ days: 7, tickets: 60 }, { headcount: 2 }, CFG);
+  const known = bd.items.filter((it) => it.perPerson !== null);
+  assert.equal(known.reduce((s, it) => s + it.perPerson, 0), bd.total);
+  assert.equal(bd.unknownCount, 0);
+  const noTicket = budget.landBudget({ days: 3 }, { headcount: 2 }, CFG);
+  assert.equal(noTicket.unknownCount, 1, '门票未标 → 一项未知');
+  assert.equal(noTicket.ticketsUnknown, true, '旧字段名留着:卡片角标吃它');
+  assert.equal(noTicket.items.find((i) => i.key === 'tickets').perPerson, null);
 });
 
 test('enrichWithTransport:estAll 含往返火车,超预算改按含交通口径重算', async () => {
@@ -255,7 +247,11 @@ test('stayCfgFor/regionStayMap:区域基准字段级覆盖 config', () => {
   assert.equal(fallback.note, undefined);
   assert.deepEqual(regionStayMap({ a: { stay: { perPersonPerDay: 90 } }, b: {} }),
     { a: { perPersonPerDay: 90 } });
-  // costBreakdown 吃 regionStay 映射
-  const bd = costBreakdown({ days: 2, regionId: 'a' }, { ...cfg, regionStay: { a: { perPersonPerDay: 90 } } });
-  assert.equal(bd.food, 180);
+  // 区域基准要一路传到落地估算里(季节/档次也一样,都由 cfg 注入)
+  const bd = budget.landBudget({ days: 2, regionId: 'a' }, { headcount: 1 }, { ...cfg, regionStay: { a: { perPersonPerDay: 90 } } });
+  assert.equal(bd.items.find((i) => i.key === 'food').perPerson, 180);
+  assert.match(bd.items.find((i) => i.key === 'food').note, /区域基准/);
+  // stayCfgFor 不能丢掉用户覆盖的档次系数表
+  assert.deepEqual(stayCfgFor({ lodging: { perRoomPerNight: 300, tierFactors: { 经济: 0.5, 舒适: 1.2 } } }, null).lodging.tierFactors,
+    { 经济: 0.5, 舒适: 1.2 });
 });

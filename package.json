@@ -7,13 +7,16 @@
   "productName": "孤山掠影",
   "scripts": {
     "app": "electron .",
-    "test": "npm run lint && node --test test/*.test.mjs",
+    "test": "npm run lint && node --test test/*.test.mjs && npm run smoke:dom",
+    "test:unit": "node --test test/*.test.mjs",
     "lint": "eslint electron lib src",
     "lint:fix": "eslint electron lib src --fix",
     "smoke:rail": "node scripts/smoke-12306.cjs",
     "smoke:region": "node scripts/smoke-region.mjs",
+    "smoke:dom": "electron test/dom-smoke.cjs",
     "preview": "node test/make-preview.mjs && node scripts/preview-server.mjs",
-    "dist": "electron-builder --win portable"
+    "dist": "electron-builder --win portable",
+    "shortcut": "node scripts/make-shortcut.mjs"
   },
   "devDependencies": {
     "electron": "44.0.0",

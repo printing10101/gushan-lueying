@@ -1,6 +1,6 @@
 import { createRequire } from 'module';
 const require = createRequire(new URL('../package.json', import.meta.url));
-const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan } = require('./lib/planner.js');
+const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan, buildLegs, noTrailHint, tripIdFor, dayAnchors, forecastsByDate, railBudgetItem, pickTrails, fillSpareDays } = require('./lib/planner.js');
 const test = require('node:test');
 const assert = require('node:assert');
 
@@ -30,13 +30,15 @@ test('planDays:环线 + 2 日徒步插在徒步节点', () => {
   assert.equal(after[0].km, 340);
 });
 
-test('planDays:超过单日上限时切分并打 overKm 标记', () => {
+test('planDays:能拆的绝不超单日上限,只有拆不动的单条 leg 才标 overKm', () => {
   const days = planDays(loop, legs, null, 5, 300);
-  // 100+150=250 继续累积;+110=360>300 → 该日 overKm 并在下一段后切分
-  const flagged = days.filter((d) => d.overKm);
-  assert.ok(flagged.length >= 1);
-  const totalKm = days.filter((d) => d.type === 'drive').reduce((s, d) => s + d.km, 0);
-  assert.equal(totalKm, 700); // 全程守恒
+  // 100+150=250 继续;再加 110 会到 360>300 → 先收 250 这天(旧写法会先塞进去再判,长出 360 的一天)
+  const drive = days.filter((d) => d.type === 'drive');
+  assert.deepEqual(drive.map((d) => d.km), [250, 110, 340]);
+  assert.equal(drive.filter((d) => d.km > 300).length, 1, '只有 340 那条单 leg 超限');
+  assert.deepEqual(drive.filter((d) => d.overKm).map((d) => d.km), [340],
+    'overKm 只标"一条路拆不成两天"的日子,能靠切分避免的不许标');
+  assert.equal(drive.reduce((s, d) => s + d.km, 0), 700); // 全程守恒
 });
 
 test('planDays:单条 leg 超上限时不与前序短 leg 叠加(曾把 381+711 堆成 962km)', () => {
@@ -77,22 +79,36 @@ test('addDays:跨月', () => {
   assert.equal(addDays('2026-10-30', 3), '2026-11-02');
 });
 
-test('stayBudget:缺省配置用兜底值并在备注言明', () => {
-  const [lodging, food] = stayBudget(7, 2, {});
-  // 6 晚 × ¥200 × 1 间(2人一间)
+test('stayBudget:缺省配置用兜底值并在备注言明(公式在 lib/budget.js,这里验行程语义)', () => {
+  const [lodging, food] = stayBudget({ days: 7, headcount: 2, startDate: null, cfg: {} });
+  // 6 晚 × ¥200 × 1 间(2 人一间)
   assert.equal(lodging.amount, 1200);
-  assert.ok(lodging.note.includes('默认估算'));
+  assert.ok(lodging.note.includes('默认估算'), lodging.note);
+  assert.ok(lodging.note.includes('住宿 6 晚') || lodging.name === '住宿 6 晚', '晚数 = 天数-1(行程语义)');
   // 7 天 × ¥80 × 2 人
   assert.equal(food.amount, 1120);
+  assert.ok(lodging.note.includes('未填出发日期,按中性基准'), '没日期就要说出来,不能悄悄用 1.0');
 });
 
 test('stayBudget:配置值生效,房间数向上取整', () => {
   const cfg = { lodging: { perRoomPerNight: 300, peoplePerRoom: 2 }, food: { perPersonPerDay: 100 } };
-  const [lodging, food] = stayBudget(5, 3, cfg);
+  const [lodging, food] = stayBudget({ days: 5, headcount: 3, startDate: '2026-10-02', cfg });
   // 4 晚 × ¥300 × 2 间(3人 → ceil(3/2)=2 间)
   assert.equal(lodging.amount, 2400);
   assert.ok(lodging.note.includes('配置值'));
   assert.equal(food.amount, 1500);
+});
+
+test('stayBudget:季节系数按出发日期吃进去(国庆比平日贵,且备注写来源)', () => {
+  const cfg = { lodging: { perRoomPerNight: 200, peoplePerRoom: 2 }, food: { perPersonPerDay: 80 } };
+  const seasonality = { holidays: [{ label: '国庆', from: '2026-10-01', to: '2026-10-07', lodging: 1.8, food: 1.2 }] };
+  const 平日 = stayBudget({ days: 4, headcount: 2, startDate: '2026-11-15', cfg });
+  const 国庆 = stayBudget({ days: 4, headcount: 2, startDate: '2026-10-03', cfg, } );
+  const 国庆季 = stayBudget({ days: 4, headcount: 2, startDate: '2026-10-03', cfg: { ...cfg, seasonality } });
+  assert.equal(平日[0].amount, 3 * 200, '3 晚 × 200 × 1 间');
+  assert.equal(国庆[0].amount, 3 * 200, '表没给就等于中性基准,不能猜');
+  assert.equal(国庆季[0].amount, Math.round(3 * 200 * 1.8));
+  assert.match(国庆季[0].note, /季节 ×1\.8\(国庆\)/);
 });
 
 test('pickCandidates:主选打头,补足到 5 趟,不含重复', () => {
@@ -121,13 +137,78 @@ test('railBudgetItems:火车票按人头计,备注带坐席', () => {
   assert.equal(back.note, 'K118 硬卧 ×3人');
 });
 
-test('railBudgetItems:无车次与超预售期分开说,金额未知', () => {
+test('railBudgetItems:无车次与超预售期分开说,金额未知(且没有占位估算可用时说破)', () => {
   const [none, presale] = railBudgetItems(
     { chosen: null, presale: false },
     { chosen: null, presale: true }, 2);
   assert.equal(none.amount, null);
-  assert.equal(none.note, '没有可购车次');
+  assert.match(none.note, /没有可购车次/, '真没车就说没车,不能含糊');
+  assert.match(none.note, /没取到可用的占位估算/, '连占位价都没有时必须说清,而不是留个空');
   assert.ok(presale.note.includes('预售期'));
+});
+
+// ---- 逐日天气锚点 ----
+test('dayAnchors:驾车日锚在当天最后一个节点,徒步日锚在徒步节点,休整/提示日无锚点', () => {
+  const schedule = [
+    { date: '2026-10-15', type: 'drive', legs: [{ from: '成都', to: '映秀' }, { from: '映秀', to: '丹巴' }] },
+    { date: '2026-10-16', type: 'hike', trail: '党岭' },
+    { date: '2026-10-17', type: 'rest' },
+    { date: '2026-10-18', type: 'note', text: 'x' },
+    { date: '2026-10-19', type: 'drive', legs: [{ from: '丹巴', to: '成都' }] },
+  ];
+  assert.deepEqual(dayAnchors(schedule, '丹巴'), [
+    { date: '2026-10-15', node: '丹巴' },
+    { date: '2026-10-16', node: '丹巴' },
+    { date: '2026-10-19', node: '成都' },
+  ], '驾车日取当天终点(不是起点)');
+  assert.deepEqual(dayAnchors([], 'x'), []);
+});
+
+test('forecastsByDate:按锚点名取当天预报,取不到的点/日就不出条目', () => {
+  const many = [
+    { name: '丹巴', forecast: [{ date: '2026-10-15', label: '晴', tempMax: 18 }] },
+    { name: '成都', forecast: [{ date: '2026-10-19', label: '小雨', tempMax: 20 }] },
+  ];
+  const out = forecastsByDate([
+    { date: '2026-10-15', node: '丹巴' },
+    { date: '2026-10-16', node: '丹巴' },
+    { date: '2026-10-19', node: '成都' },
+    { date: '2026-10-20', node: '不存在' },
+  ], many);
+  assert.deepEqual(Object.keys(out).sort(), ['2026-10-15', '2026-10-19'],
+    '取不到就空着,不拿别的点的天气凑');
+  assert.equal(out['2026-10-15'].at, '丹巴', '要带上是哪个点的预报');
+  assert.equal(out['2026-10-19'].label, '小雨');
+});
+
+// ---- 票价占位:接口失败 / 预售期 / 真没车 三件事分开说 ----
+test('railBudgetItem:没查到车次但有往返估算 → 填占位价并说明口径', () => {
+  const it = railBudgetItem({ date: '2026-10-20', presale: true, error: null }, '火车去程', 2,
+    { perPerson: 600, note: '经西安中转;' });
+  assert.equal(it.amount, 300 * 2, '按往返÷2 再乘人数');
+  assert.match(it.note, /超出预售期/);
+  assert.match(it.note, /出发前请复核/);
+});
+
+test('railBudgetItem:接口失败与"没有可购车次"必须是两句不同的话', () => {
+  const failed = railBudgetItem({ error: 'queryG: 返回非 JSON' }, '火车去程', 1, { perPerson: 400 });
+  assert.match(failed.note, /取价失败/);
+  const noTrain = railBudgetItem({ error: null, presale: false }, '火车去程', 1, { perPerson: 400 });
+  assert.match(noTrain.note, /没有可购车次/);
+  assert.ok(!/取价失败/.test(noTrain.note), '别把"真没车"说成接口坏了');
+});
+
+test('railBudgetItem:连占位估算都拿不到 → 保持 null 并说清,不编一个价', () => {
+  const it = railBudgetItem({ presale: true }, '火车回程', 1, null);
+  assert.equal(it.amount, null);
+  assert.match(it.note, /没取到可用的占位估算/);
+});
+
+test('railBudgetItem:有票时照旧走实价,不受占位逻辑影响', () => {
+  const it = railBudgetItem({ chosen: { code: 'D117' }, seat: { label: '二等座', price: 263 } },
+    '火车去程', 3, { perPerson: 600 });
+  assert.equal(it.amount, 263 * 3);
+  assert.match(it.note, /D117 二等座 ×3人/);
 });
 
 test('hikeBudgetItem:门票按人头,未标注按 0', () => {
@@ -257,4 +338,146 @@ test('fuelPlan:取到实价就替换 config 价并言明来源,取不到保持 c
   assert.equal(miss.fuel.pricePerL, 8.2);
   assert.match(miss.note, /config ¥8\.2/);
   assert.match(fuelPlan(null, null).note, /config ¥\?/);
+});
+
+// ---- 徒步起点=环线第 0 站(枢纽)的排法 ----
+// 环线的最后一腿闭环回到 loop[0],旧实现在那一刻才插徒步块:实测 jingxi + 香八拉
+// 排出「先绕完 515km 全程、再开始走一天」,而且整圈堆成一天还超单日上限。
+test('planDays:徒步节点=loop[0] 时徒步排在所有驾车日之前', () => {
+  const l = [{ name: '北京' }, { name: '斋堂' }, { name: '涿鹿' }, { name: '北京' }];
+  const lg = [{ from: '北京', to: '斋堂', km: 90 }, { from: '斋堂', to: '涿鹿', km: 120 },
+    { from: '涿鹿', to: '北京', km: 130 }];
+  const trail = { name: '香八拉', node: '北京', days: 1 };
+  const days = planDays(l, lg, trail, 4, 400);
+  assert.equal(days[0].type, 'hike', '落地当天就该走,不是绕完一圈再走');
+  assert.equal(days.filter((d) => d.type === 'hike').length, 1,
+    '闭环最后一腿的 to 同样等于 trail.node,不得插第二块徒步');
+  assert.equal(days.filter((d) => d.type === 'drive').reduce((s, d) => s + d.km, 0), 340,
+    '全程里程守恒');
+});
+
+test('planDays:节点=loop[0] 且需插机动休整日时,顺序为 休整 → 徒步 → 驾车', () => {
+  const l = [{ name: '拉萨' }, { name: '米林' }, { name: '拉萨' }];
+  const lg = [{ from: '拉萨', to: '米林', km: 300 }, { from: '米林', to: '拉萨', km: 300 }];
+  const days = planDays(l, lg, { name: '甘丹寺—桑耶寺', node: '拉萨', days: 2 }, 6, 400, { restDays: 1 });
+  assert.deepEqual(days.slice(0, 3).map((d) => d.type), ['rest', 'hike', 'hike']);
+});
+
+test('planDays:jingxi 实测形态——香八拉在前,且五段不再堆成 515km 的一天', () => {
+  // 真实数据形状:北京→斋堂→涿鹿→蔚县→怀来→北京,直线估算 81/77/103/132/122 km
+  const l = ['北京', '斋堂', '涿鹿', '蔚县', '怀来', '北京'].map((name) => ({ name }));
+  const lg = [81, 77, 103, 132, 122].map((km, i) => ({ from: l[i].name, to: l[i + 1].name, km }));
+  const days = planDays(l, lg, { name: '香八拉', node: '北京', days: 1 }, 4, 400);
+  assert.equal(days[0].type, 'hike');
+  const drive = days.filter((d) => d.type === 'drive');
+  assert.deepEqual(drive.map((d) => d.km), [393, 122], '393+122=515 必须拆成两天');
+  assert.equal(drive.some((d) => d.overKm), false, '能拆开的日子不该挂"行程偏紧"');
+});
+
+// ---- 里程来源:没 Key 走估算,有 Key 的错误不许被估算吞掉 ----
+test('buildLegs:未配 Key 时逐段估算并全程标注 estimated', async () => {
+  const loop = [{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 },
+    { name: 'A', lng: 100, lat: 30 }];
+  const { legs, estimated } = await buildLegs(loop, { hasKey: false });
+  assert.equal(legs.length, 2);
+  assert.equal(estimated, true);
+  assert.ok(legs[0].km > 0);
+  assert.equal(legs[0].estimated, true);
+  assert.equal(legs[0].route.path, '', '估算没有真实路线可画');
+});
+
+test('buildLegs:配了 Key 时 routeFn 抛错必须原样抛出,不静默降级成估算', async () => {
+  const loop = [{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 }];
+  await assert.rejects(
+    buildLegs(loop, { hasKey: true, routeFn: async () => { throw new Error('高德路径规划坐标非法'); } }),
+    /坐标非法/,
+  );
+});
+
+test('tripIdFor:同条件重生成算刷新,换线路/换天数就另开一档,不冲掉上一版', () => {
+  const mk = (over) => ({ id: 'x', input: { trailId: 'a', days: 7, headcount: 2, regionId: 'jingxi', startDate: '2026-10-14' }, ...over });
+  const A = mk({});
+  const B = mk({ input: { ...A.input, trailId: 'b' } });
+  // 没有存档 → 用 base
+  assert.equal(tripIdFor({ base: 'd-r', input: A.input, lookup: () => null }), 'd-r');
+  // 已有同条件存档 → 还是 base(覆盖自己)
+  assert.equal(tripIdFor({ base: 'd-r', input: A.input, lookup: (id) => (id === 'd-r' ? A : null) }), 'd-r');
+  // base 是 A 方案,现在生成 B 方案 → 另开 d-r-2
+  assert.equal(tripIdFor({ base: 'd-r', input: B.input, lookup: (id) => (id === 'd-r' ? A : null) }), 'd-r-2');
+  // 两个方案各自稳定:A 永远落 d-r,B 永远落 d-r-2(不会互相挤掉)
+  const two = { 'd-r': A, 'd-r-2': B };
+  assert.equal(tripIdFor({ base: 'd-r', input: A.input, lookup: (id) => two[id] || null }), 'd-r');
+  assert.equal(tripIdFor({ base: 'd-r', input: B.input, lookup: (id) => two[id] || null }), 'd-r-2');
+  // 天数不同也算另一份;人数不同同样
+  assert.equal(tripIdFor({ base: 'd-r', input: { ...A.input, days: 9 }, lookup: (id) => (id === 'd-r' ? A : null) }), 'd-r-2');
+  assert.equal(tripIdFor({ base: 'd-r', input: { ...A.input, headcount: 4 }, lookup: (id) => (id === 'd-r' ? A : null) }), 'd-r-2');
+  // 前 3 档都被别的方案占着 → 找到第一个空位
+  const three = { 'd-r': A, 'd-r-2': B, 'd-r-3': mk({ input: { ...A.input, trailId: 'c' } }) };
+  assert.equal(tripIdFor({ base: 'd-r', input: mk({ input: { ...A.input, trailId: 'e' } }).input, lookup: (id) => three[id] || null }), 'd-r-4');
+});
+
+test('noTrailHint:天数放不下时说清最短线路与建议天数,而不是让行程长出 0 个徒步日', () => {
+  const trails = {
+    a: { regionId: 'zd', days: 4, name: '四天线', status: '开放' },
+    b: { regionId: 'zd', days: 6, name: '六天线', status: '开放' },
+    c: { regionId: 'zd', days: 1, name: '禁入线', status: '禁入' },
+    d: { regionId: 'other', days: 1, name: '别区线', status: '开放' },
+  };
+  const msg = noTrailHint(trails, 'zd', 3);
+  assert.match(msg, /最短的一条要走 4 天/);
+  assert.match(msg, /至少需要 6 天/);
+  assert.match(msg, /当前 3 天/);
+  assert.match(msg, /另有 1 条禁入\/关闭/);
+  assert.match(noTrailHint({}, 'zz', 5), /还没有接入/);
+});
+
+// ---- 多线串联 ----
+test('pickTrails:显式选多条按给定顺序返回,同一节点也允许(两条线连着走)', () => {
+  const trails = {
+    a: { regionId: 'cx', days: 1, name: '甲线', node: '丹巴' },
+    b: { regionId: 'cx', days: 2, name: '乙线', node: '丹巴' },
+    c: { regionId: 'cx', days: 1, name: '丙线', node: '八美' },
+    x: { regionId: 'other', days: 1, name: '别区' },
+  };
+  assert.deepEqual(pickTrails(trails, 'cx', ['b', 'a'], 9, {}).map((t) => t.name), ['乙线', '甲线']);
+  assert.deepEqual(pickTrails(trails, 'cx', ['a', 'a'], 9, {}).map((t) => t.name), ['甲线'], '重复的 id 只算一次');
+  assert.throws(() => pickTrails(trails, 'cx', ['x'], 9, {}), /不属于该区域/);
+  assert.throws(() => pickTrails(trails, 'cx', ['a', 'b', 'c'], 3, {}), /至少要 6 天/, '几条线的天数超了就响亮报错');
+  // 没给 id 时退回自动选一条(不替用户凑满)
+  assert.equal(pickTrails(trails, 'cx', [], 9, { month: 7 }).length, 1);
+  assert.deepEqual(pickTrails(trails, 'cx', null, 9, { month: 7 }).length, 1);
+});
+
+test('planDays:两条线同节点时连着排,各自算自己的天数', () => {
+  const l = [{ name: 'A' }, { name: 'B' }, { name: 'A' }];
+  const lg = [{ from: 'A', to: 'B', km: 100 }, { from: 'B', to: 'A', km: 100 }];
+  const days = planDays(l, lg, [
+    { name: '甲', node: 'B', days: 1 },
+    { name: '乙', node: 'B', days: 2 },
+  ], 5, 400);
+  assert.deepEqual(days.map((d) => d.type), ['drive', 'hike', 'hike', 'hike', 'drive']);
+  assert.deepEqual(days.filter((d) => d.type === 'hike').map((d) => d.trail), ['甲', '乙', '乙']);
+});
+
+test('planDays:节点不在环线上时响亮报错,而不是静默排一条开不到的行程', () => {
+  const l = [{ name: 'A' }, { name: 'B' }, { name: 'A' }];
+  const lg = [{ from: 'A', to: 'B', km: 100 }, { from: 'B', to: 'A', km: 100 }];
+  assert.throws(() => planDays(l, lg, [{ name: '野线', node: '不存在', days: 1 }], 5, 400), /不在该区域环线上/);
+});
+
+// ---- 余量天数:补成机动日而不是留一句"天数不对齐" ----
+test('fillSpareDays:排不满就补机动日,天数守恒重新成立', () => {
+  const plan = [{ type: 'hike' }, { type: 'drive' }];
+  const out = fillSpareDays(plan, 6);
+  assert.equal(out.length, 5, '输入 6 天 → 除出发日外应排 5 天');
+  assert.equal(out.filter((d) => d.spare).length, 3);
+  assert.ok(out.filter((d) => d.spare).every((d) => d.type === 'rest'), '补的是机动日,不是假驾车日');
+});
+
+test('fillSpareDays:排满/排不下时原样返回,偏紧提示必须留着', () => {
+  const full = [{ type: 'drive' }, { type: 'hike' }];
+  assert.deepEqual(fillSpareDays(full, 3), full, '正好排满 → 原样返回');
+  // 排太多(带 note 表示偏紧):原样返回,提示不能被吃掉
+  const withNote = [{ type: 'drive' }, { type: 'note', text: '偏紧' }];
+  assert.deepEqual(fillSpareDays(withNote, 2), withNote, '偏紧提示要留着,不能因为补机动日就丢了它');
 });

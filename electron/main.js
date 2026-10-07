@@ -14,6 +14,7 @@ const rail = require('../lib/rail12306');
 const weather = require('../lib/weather');
 const planner = require('../lib/planner');
 const grading = require('../lib/grading');
+const gpxLib = require('../lib/gpx');
 const recommend = require('../lib/recommend');
 const runos = require('../lib/runos');
 const fitness = require('../lib/fitness');
@@ -59,6 +60,10 @@ function readData(name) {
   if (name === 'trails' && data) {
     for (const trail of Object.values(data)) trail._grade = grading.computeBreakdown(trail);
   }
+  // config:把"example 有而 config 没有"的键位随读返回,由界面提示(派生字段,不写盘)
+  // 为什么只报不补:ensureConfig 只在文件不存在时拷,此后 example 新增的键不会进已有 config,
+  // 缺 flightCityPinyin 时「查机票」是点了必报错的那种(代码里没有默认值)。补谁的配置由用户自己定。
+  if (name === 'config' && data) data._gaps = store.configGaps();
   return data;
 }
 
@@ -89,7 +94,12 @@ ipcMain.handle('trails:recommend', wrap(async (input) => {
   const marks = store.read('marks') || {};
   const doneIds = Object.entries(marks).filter(([, m]) => m?.doneAt).map(([id]) => id);
   const regions = store.read('regions') || {};
-  const cfg = { ...(store.read('config') || {}), regionStay: recommend.regionStayMap(regions) };
+  // cfg 里带两份口径:区域吃住基准 + 季节系数表(推荐页的落地估算要用)
+  const cfg = {
+    ...(store.read('config') || {}),
+    regionStay: recommend.regionStayMap(regions),
+    seasonality: store.read('seasonality') || {},
+  };
 
   // 体能上限做默认难度闸门:RunOS 有数据就自动收窄到「当前能驾驭的难度」,取不到就不设限
   const picked = input || {};
@@ -175,6 +185,100 @@ ipcMain.handle('trip:export', async (_event, { defaultName, markdown }) => {
   }
   return { canceled: false, filePath };
 });
+// 行程 → GPX(离线带到手机/手表)。轨迹在**主进程**用 lib/gpx.js 的纯函数拼,渲染层只交 tripId。
+// 为什么读存档而不是收整个 trip:存档是生成时落盘的权威副本,既不用把大对象再 IPC 一次,
+// 也不给渲染层一个"伪造行程写进用户磁盘"的入口。
+ipcMain.handle('trip:exportGpx', async (_event, { tripId }) => {
+  if (!/^[A-Za-z0-9_-]+$/.test(String(tripId || ''))) throw new Error(`非法的行程 id: ${tripId}`);
+  const trip = store.read(`trips/${tripId}`);
+  if (!trip) throw new Error(`存档 ${tripId} 不存在,无法导出 GPX`);
+  const region = (store.read('regions') || {})[trip.input?.regionId];
+  const gpx = gpxLib.tripToGpx(trip, region);
+  const win = BrowserWindow.getAllWindows()[0];
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: `轨迹-${tripId}.gpx`,
+    filters: [{ name: 'GPX 轨迹', extensions: ['gpx'] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+  try {
+    fs.writeFileSync(filePath, gpx, 'utf8');
+  } catch (e) {
+    throw new Error(`写入 ${filePath} 失败: ${e.message}`);
+  }
+  const points = (gpx.match(/<trkpt/g) || []).length;
+  return {
+    canceled: false,
+    filePath,
+    points,
+    // 轨迹点为 0 时只有一条徒步起点路点,必须说破,别让人以为导出了路线
+    note: points ? '' : '无驾车轨迹数据(存档里没有真实路线),本次只导出线路起点路点',
+  };
+});
+// 卡片「导入 GPX」:选文件 → 解析实测量 → 与标称值比 → 小差异才写盘。
+// 两阶段(用一次性 token 串起来,不让用户选两次文件,也不让渲染层随意指定路径):
+//   第一次 {trailId}            → 弹选择框、解析、算 diff,返回 token 与对比表(dryRun)
+//   第二次 {token, confirmed}   → 凭 token 落盘
+// **有 review 项一律不写**:差超 GPX_REVIEW_PCT 说明"抄来的数"与"量出来的数"至少有一个错,
+// 谁覆盖谁必须人判(lib/gpx.js 的既定纪律,这里不放宽)。
+// 写盘格式安全:data/trails.json 实测与 JSON.stringify(…,null,2) 逐字节一致,整体重写不产生无意义 diff。
+// (这条只对 trails.json 成立;regions.json 是手工格式,严禁走这条路径。)
+const pendingGpx = new Map(); // token → { trailId, apply, reviewCount, filePath }
+const GPX_TOKEN_TTL_MS = 5 * 60 * 1000;
+
+function issueGpxToken(payload) {
+  const token = `gx${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  pendingGpx.set(token, { ...payload, expires: Date.now() + GPX_TOKEN_TTL_MS });
+  // 顺手清掉过期项:用户中途取消的话 token 不会有人消费
+  for (const [k, v] of pendingGpx) if (v.expires < Date.now()) pendingGpx.delete(k);
+  return token;
+}
+
+ipcMain.handle('gpx:import', wrap(async ({ trailId, token, confirmed = false }) => {
+  if (confirmed) {
+    const held = token && pendingGpx.get(token);
+    if (!held || held.expires < Date.now()) throw new Error('确认已过期,请重新选择 GPX 文件');
+    pendingGpx.delete(token);
+    const trails = store.read('trails') || {};
+    const trail = trails[held.trailId];
+    if (!trail) throw new Error(`线路 ${held.trailId} 不存在`);
+    if (held.reviewCount) {
+      return { written: false, trailId: held.trailId,
+        blocked: `有 ${held.reviewCount} 项与标称值差超 ${gpxLib.GPX_REVIEW_PCT}%,按纪律不覆盖,请人工裁决` };
+    }
+    const fields = Object.keys(held.apply);
+    if (!fields.length) return { written: false, trailId: held.trailId, blocked: '没有可写字段' };
+    for (const f of fields) trail[f] = held.apply[f];
+    store.write('trails', trails);
+    return { written: true, trailId: held.trailId, wrote: fields, apply: held.apply };
+  }
+  const trails = store.read('trails') || {};
+  const trail = trails[trailId];
+  if (!trail) throw new Error(`线路 ${trailId} 不存在`);
+  const win = BrowserWindow.getAllWindows()[0];
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: `选择「${trail.name}」的 GPX 轨迹`,
+    filters: [{ name: 'GPX 轨迹', extensions: ['gpx'] }],
+    properties: ['openFile'],
+  });
+  if (canceled || !filePaths[0]) return { canceled: true };
+  const file = filePaths[0];
+  const size = fs.statSync(file).size;
+  if (size > 20 * 1024 * 1024) throw new Error(`GPX 文件过大(${Math.round(size / 1048576)}MB),不解析`);
+  const measured = gpxLib.parseGpx(fs.readFileSync(file, 'utf8'));
+  if (!measured.ok) {
+    return { canceled: false, file, error: measured.error, points: measured.points, skipped: measured.skipped };
+  }
+  const d = gpxLib.mergeMeasured(trail, {
+    distanceKm: measured.distanceKm,
+    // climbM/maxAltM 缺高程时是 null:mergeMeasured 归入 rejected,不会写脏字段
+    climbM: measured.climbM,
+    maxAltM: measured.maxAltM,
+  });
+  const issuedToken = issueGpxToken({
+    trailId, apply: d.apply, reviewCount: d.review.length, filePath: file,
+  });
+  return { canceled: false, file, measured, token: issuedToken, d, willWrite: Object.keys(d.apply), dryRun: true };
+}));
 // 外链兜底(如无火车票时查机票):只放行 https,防止渲染层被诱导开任意协议
 ipcMain.handle('shell:openExternal', wrap((url) => {
   if (typeof url !== 'string' || !/^https:\/\/.+/.test(url)) throw new Error(`只允许打开 https 链接: ${url}`);

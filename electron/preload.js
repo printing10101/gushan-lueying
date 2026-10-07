@@ -14,5 +14,7 @@ contextBridge.exposeInMainWorld('gushan', {
   resolveStation: (keyword) => ipcRenderer.invoke('rail:resolveStation', keyword),
   weatherForecast: (lng, lat, days) => ipcRenderer.invoke('weather:forecast', { lng, lat, days }),
   exportTrip: (defaultName, markdown) => ipcRenderer.invoke('trip:export', { defaultName, markdown }),
+  exportGpx: (tripId) => ipcRenderer.invoke('trip:exportGpx', { tripId }),
+  importGpx: (payload) => ipcRenderer.invoke('gpx:import', payload),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 });

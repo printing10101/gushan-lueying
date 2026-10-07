@@ -1,6 +1,7 @@
 // 区域端到端冒烟:真实 12306 余票 + 真实 Open-Meteo 天气,拼装走真实 planner。
-// 仅高德驾车距离用"直线×1.3"近似打桩(require 缓存补丁),因此没有高德 Key 也能验证区域数据
-// 与行程拼装全链路;配好 Key 后跑 GUSHAN_MOCK_DRIVE=0 即是全真实链路。
+// 驾车段:没配高德 Key 时直接走 app 自己的「直线×1.3」估算路径(planner 内置,与用户看到的同一条路);
+// 配了 Key 但不想烧配额时,用 lib/amap.estimatedRoute 顶替(系数单一来源,不再手抄 1.3/45);
+// GUSHAN_MOCK_DRIVE=0 则打真实高德接口。
 // 用法:node scripts/smoke-region.mjs [regionId=chuanxi] [出发站=成都东] [日期=+7天] [天数=7] [trailId=自动]
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
@@ -9,19 +10,12 @@ const amap = require('../lib/amap');
 
 if (process.env.GUSHAN_MOCK_DRIVE === '0') {
   console.log('== 驾车段走真实高德 API ==');
+} else if (amap.hasKey()) {
+  amap.drivingRoute = async (from, to) => amap.estimatedRoute(from, to);
+  console.log('== 已配 Key,驾车段用 lib/amap.estimatedRoute 顶替以省配额'
+    + '(GUSHAN_MOCK_DRIVE=0 走真实高德) ==');
 } else {
-  const R = 6371;
-  const haversineKm = (a, b) => {
-    const rad = (x) => (x * Math.PI) / 180;
-    const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2
-      + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lng - a.lng) / 2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(h));
-  };
-  amap.drivingRoute = async (from, to) => {
-    const km = Math.round(haversineKm(from, to) * 1.3);
-    return { distanceKm: km, durationHours: Math.round((km / 45) * 10) / 10, tolls: null, mocked: true };
-  };
-  console.log('== 驾车段为直线近似(GUSHAN_MOCK_DRIVE=0 用真实高德) ==');
+  console.log('== 未配 Key,驾车段走 planner 内置的直线×1.3 估算(与 app 内同一条路径) ==');
 }
 
 const pad = (x) => String(x).padStart(2, '0');

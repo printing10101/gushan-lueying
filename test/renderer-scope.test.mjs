@@ -122,3 +122,27 @@ test('每个 lib 都有 window.GushanLib 挂载语句,且导出名与 app.js 的
   assert.equal(problems.length, 0, problems.join('\n   '));
   assert.ok(used.size > 0, 'app.js 里没解析到任何 LIB.X 取用,测试本身失效了');
 });
+
+// app.js 里 `gushan.X(...)` 用到的每一个方法,preload 都必须真的暴露。
+// 缺一个的症状与当年「LIB.tripMarkdown 没写 script 标签」一模一样:
+// 平时不炸,只有点到那个按钮才炸,而单测与主进程都碰不到。
+test('app.js 用到的每个 gushan.X 都在 preload 里暴露(导出 GPX 等新入口靠它兜住)', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(ROOT, 'electron', 'preload.js'), 'utf8');
+  const used = new Set([...app.matchAll(/\bgushan\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+  const missing = [...used].filter((k) => !new RegExp(`\\b${k}\\s*:`).test(preload));
+  assert.ok(used.size >= 10, `只解析到 ${used.size} 个 gushan.X,大概率为提取式失效`);
+  assert.deepEqual(missing, [], `preload 未暴露:${missing.join(', ')}`);
+});
+
+// 实测量与 GPX 导入必须有界面入口。文案里出现「去手改 data/marks.json」就说明入口又没了——
+// 这条只能做静态断言:跑 DOM 冒烟时库里没有走过标记,那句提示本来不会出现。
+test('实测量/GPX 的录入入口必须存在于 app.js', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
+  for (const needle of ['data-actual="', 'data-gpx="', 'recordActuals', 'importGpxFor',
+    'trip-gpx', 'exportTripGpx']) {
+    assert.ok(app.includes(needle), `app.js 缺录入入口要素:${needle}`);
+  }
+  assert.ok(!app.includes('在 data/marks.json 该线路下加'),
+    '实测量要有界面入口,不能只留一句"去手改 data/marks.json"');
+});
