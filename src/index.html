@@ -12,11 +12,11 @@
        收不掉。若哪天要彻底去掉,唯一路径是换自托管瓦片渲染,代价远大于收益。 -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'none';
-    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webapi.amap.com https://*.amap.com;
-    style-src 'self' 'unsafe-inline' https://webapi.amap.com https://*.amap.com;
-    img-src 'self' data: blob: https://*.amap.com https://amap.com;
-    font-src 'self' data: https://*.amap.com;
-    connect-src 'self' https://webapi.amap.com https://*.amap.com;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webapi.amap.com https://*.amap.com https://map.qq.com https://*.map.qq.com;
+    style-src 'self' 'unsafe-inline' https://webapi.amap.com https://*.amap.com https://map.qq.com https://*.map.qq.com;
+    img-src 'self' data: blob: https://*.amap.com https://amap.com https://*.map.qq.com https://map.qq.com;
+    font-src 'self' data: https://*.amap.com https://*.map.qq.com;
+    connect-src 'self' https://webapi.amap.com https://*.amap.com https://apis.map.qq.com https://*.map.qq.com;
     form-action 'none';
     base-uri 'none';
     object-src 'none';

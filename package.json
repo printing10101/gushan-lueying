@@ -16,7 +16,8 @@
     "smoke:dom": "electron test/dom-smoke.cjs",
     "preview": "node test/make-preview.mjs && node scripts/preview-server.mjs",
     "dist": "electron-builder --win portable",
-    "shortcut": "node scripts/make-shortcut.mjs"
+    "shortcut": "node scripts/make-shortcut.mjs",
+    "smoke:serve": "electron test/serve-smoke.cjs"
   },
   "devDependencies": {
     "electron": "44.0.0",
