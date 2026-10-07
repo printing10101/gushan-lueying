@@ -60,16 +60,33 @@ test('drivingRoute:请求 URL 与参数形状(纬度在前 + output=json)', asyn
   }
 });
 
-test('drivingRoute:腾讯不返回过路费 → tolls 给 null,交给 calcCosts 估并标「(估)」', async () => {
-  const stub = withStub({ status: 0, result: { routes: [{ distance: 1000, duration: 10, taxi_fare: 25 }] } });
+test('drivingRoute:过路费取真实 toll 字段(文档字段表没列它,真实响应里有)', async () => {
+  const stub = withStub({ status: 0, result: { routes: [{ distance: 76248, duration: 71, toll: 25, taxi_fare: { fare: 300 } }] } });
   try {
     const r = await tencent.drivingRoute(A, B);
-    assert.equal(r.tolls, null, '把 taxi_fare 当过路费是最容易犯的错——那是打车费');
+    assert.equal(r.tolls, 25, '要用 toll;taxi_fare 是打车费,顶替它会凭空多算几百元');
     const amap = require('./lib/amap.js');
     const cost = amap.calcCosts(r.distanceKm, r.tolls, { consumptionLPer100km: 8, pricePerL: 8.2 });
-    assert.equal(cost.tollsEstimated, true, '必须走估算分支并让 UI 能标「(估)」');
+    assert.equal(cost.tolls, 25);
+    assert.equal(cost.tollsEstimated, false, '有实数就不该标「(估)」');
   } finally {
     stub.restore();
+  }
+});
+
+test('drivingRoute:缺 toll 或 toll 非法 → null 而非 0(Number(null)===0 是陷阱)', async () => {
+  // 缺字段时给 0 等于告诉用户"这条路不收费"——那是把不知道说成知道
+  for (const bad of [undefined, null, '', '二十五', NaN]) {
+    const stub = withStub({ status: 0, result: { routes: [{ distance: 1000, duration: 10, toll: bad }] } });
+    try {
+      const r = await tencent.drivingRoute(A, B);
+      assert.equal(r.tolls, null, `toll=${JSON.stringify(bad)} 时必须是 null(尤其 null/'' 别被 Number() 变成 0)`);
+      const amap = require('./lib/amap.js');
+      const cost = amap.calcCosts(r.distanceKm, r.tolls, { consumptionLPer100km: 8, pricePerL: 8.2 });
+      assert.equal(cost.tollsEstimated, true);
+    } finally {
+      stub.restore();
+    }
   }
 });
 
@@ -169,4 +186,32 @@ test('decodePolyline:首尾不在起终点附近 → 整段作废(公式读错�
     '锚点校验是这条的判据:读法错表现为"没有轨迹线"');
   // 不带锚点时只做范围校验,(10,20) 是合法坐标,允许通过
   assert.equal(tencent.decodePolyline([10, 20, 0, 0, 0, 0]), '20.000000,10.000000;20.000000,10.000000;20.000000,10.000000');
+});
+
+// ---- 用真实响应夹具钉死解码读法(自造数据只能证明自洽,证明不了和厂商一致) ----
+test('decodePolyline:真实响应(北京→斋堂)解出的折线长度要与接口 distance 同量级', () => {
+  const fx = JSON.parse(require('fs').readFileSync(
+    new URL('./fixtures/tencent-driving-real.json', import.meta.url), 'utf8'));
+  const path = tencent.decodePolyline(fx.polyline, { from: fx.from, to: fx.to });
+  assert.ok(path, '真实 payload 必须能解出来(解不出就说明读法/校验有问题)');
+  const pts = path.split(';').map((p) => p.split(',').map(Number));
+  assert.equal(pts.length, fx.polyline.length / 2);
+  const R = 6371; const rad = (x) => (x * Math.PI) / 180;
+  let km = 0;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [lng1, lat1] = pts[i]; const [lng2, lat2] = pts[i + 1];
+    const h = Math.sin(rad(lat2 - lat1) / 2) ** 2
+      + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2;
+    km += 2 * R * Math.asin(Math.sqrt(h));
+  }
+  const apiKm = fx.distance / 1000;
+  // 判据不依赖我对压缩格式的理解:解出来的几何长度必须和接口自己报的距离对得上
+  assert.ok(Math.abs(km - apiKm) / apiKm < 0.03,
+    `折线长度 ${km.toFixed(1)}km 与接口 ${apiKm.toFixed(1)}km 偏差超 3%(说明解码读法不对)`);
+  // 首尾也要对得上(道路会就近吸附,所以留 0.02° ≈ 2km 的余量)
+  const [fLng, fLat] = pts[0];
+  assert.ok(Math.abs(fLat - fx.from.lat) < 0.02 && Math.abs(fLng - fx.from.lng) < 0.02);
+  const [tLng, tLat] = pts[pts.length - 1];
+  assert.ok(Math.abs(tLat - fx.to.lat) < 0.02, `末点纬度 ${tLat} 应对上终点 ${fx.to.lat}`);
+  assert.ok(Math.abs(tLng - fx.to.lng) < 0.02);
 });

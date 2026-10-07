@@ -609,6 +609,7 @@ async function renderResult(trip) {
     if (day.type === 'drive') {
       body = `<table>${day.legs.map((l) =>
         `<tr><td>${esc(l.from)}→${esc(l.to)}</td><td>${l.km}km / ${l.hours}h${l.estimated ? ' <span class="muted">(估算里程)</span>' : ''}</td><td>油+过路 ¥${l.costs.driveTotal}</td></tr>`).join('')}</table>
+        ${(day.legs || []).filter((l) => l.detour).map((l) => '<p class="warn">' + esc(l.from) + '→' + esc(l.to) + ' 真实里程是直线距离的 ' + l.detour.ratio + ' 倍(' + l.detour.straightKm + 'km → ' + l.km + 'km):路网里近路可能不通,算法绕了一大圈——本段建议单独核实,别当成一天能开完的路</p>').join('')}
         ${day.overKm ? '<p class="warn">当日驾车超过单日上限,行程偏紧</p>' : ''}
         ${day.lateArrival ? `<p class="warn">去程 ${esc(day.lateArrival.time)} 才到 ${esc(day.lateArrival.station)},首日驾车时间紧张,备好夜路预案</p>` : ''}
         ${day.earlyDepart ? `<p class="warn">回程 ${esc(day.earlyDepart.time)} 即发车,末日别排长驾,预留进站时间</p>` : ''}`;

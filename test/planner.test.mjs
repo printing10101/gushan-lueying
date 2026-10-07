@@ -1,6 +1,6 @@
 import { createRequire } from 'module';
 const require = createRequire(new URL('../package.json', import.meta.url));
-const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan, buildLegs, noTrailHint, tripIdFor, dayAnchors, forecastsByDate, railBudgetItem, pickTrails, fillSpareDays, routeNote } = require('./lib/planner.js');
+const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan, buildLegs, noTrailHint, tripIdFor, dayAnchors, forecastsByDate, railBudgetItem, pickTrails, fillSpareDays, routeNote, detourInfo, DETOUR_RATIO, DETOUR_MIN_STRAIGHT_KM } = require('./lib/planner.js');
 const test = require('node:test');
 const assert = require('node:assert');
 
@@ -489,7 +489,7 @@ test('routeNote:三家各说各的,腾讯那档必须点明"过路费仍是估�
   assert.match(routeNote('amap'), /过路费.*高德/);
   const tx = routeNote('tencent');
   assert.match(tx, /腾讯真实驾车路线/);
-  assert.match(tx, /过路费腾讯不返回/, '腾讯没有 tolls 字段,不写清楚就等于把估的过路费说成实价');
+  assert.ok(tx.includes('过路费'), '腾讯的过路费来自真实 toll 字段,文案要把它算进去');
   assert.match(routeNote('estimate'), /直线×1.3 估算/);
   assert.ok(routeNote('estimate').includes('未配高德/腾讯 Key'), '两家的 Key 名都要点到,用户才知道该配哪个');
   assert.ok(routeNote('whatever').includes('直线×1.3 估算'), '不认识的来源按最保守的口径说(估的)');
@@ -504,6 +504,40 @@ test('buildLegs:provider 可由 cfg 决定(没配任何 Key → estimate,不会�
 });
 
 test('buildLegs:cfg 里指定了没配 Key 的 provider 会响亮报错,不静默退回估算', async () => {
-  const loop = [{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 }];
-  await assert.rejects(buildLegs(loop, { cfg: { routeProvider: 'tencent' } }), /tencentKeyWeb/);
+  // 必须隔离真实 config:用户机器上可能真的配了腾讯 Key,那样这条断言的前提就不成立了,
+  // 而且会真的打出去一次接口(测试不该有网络副作用)。
+  const storeMod = require('./lib/store.js');
+  const realRead = storeMod.read;
+  storeMod.read = () => ({});
+  try {
+    const loop = [{ name: 'A', lng: 100, lat: 30 }, { name: 'B', lng: 101, lat: 31 }];
+    await assert.rejects(buildLegs(loop, { cfg: { routeProvider: 'tencent' } }), /tencentKeyWeb/);
+  } finally {
+    storeMod.read = realRead;
+  }
+});
+
+// ---- 疑似路网绕行:真实里程远超直线距离要单独提示 ----
+test('detourInfo:真实/直线 > 8 倍且直线 >10km 才判绕行;短腿与估算段不判', () => {
+  const A = { name: 'A', lng: 100, lat: 30 };
+  const B = { name: 'B', lng: 100.5, lat: 30 };
+  // 实测 派镇→墨脱 就是这种绕法:直线 50km、路网 1890km、186 段路
+  const far = detourInfo({ distanceKm: 1890, estimated: false }, A, B);
+  assert.ok(far.detour, '38 倍必须判出来');
+  assert.equal(far.detour.ratio, 39);
+  assert.ok(far.detour.straightKm > 40 && far.detour.straightKm < 50);
+  assert.equal(detourInfo({ distanceKm: 120, estimated: false }, A, B).detour, undefined,
+    '2.5 倍属正常山路,不报');
+  const near = { name: 'C', lng: 100, lat: 30 };
+  const near2 = { name: 'D', lng: 100.03, lat: 30 };
+  assert.equal(detourInfo({ distanceKm: 60, estimated: false }, near, near2).detour, undefined,
+    '直线 <10km 不判,免得把县城里的绕行报成路不通');
+  assert.equal(detourInfo({ distanceKm: 999, estimated: true }, A, B).detour, undefined,
+    '估算段没资格判(它本来就是直线×1.3)');
+  assert.equal(detourInfo({ distanceKm: 999, estimated: false }, undefined, B).detour, undefined);
+});
+
+test('detourInfo:阈值常量被钉住(改口径要连测试一起改)', () => {
+  assert.equal(DETOUR_RATIO, 8);
+  assert.equal(DETOUR_MIN_STRAIGHT_KM, 10);
 });
