@@ -3,6 +3,7 @@
   "amapKeyJs": "",
   "amapSecurityJsCode": "",
   "tencentKeyWeb": "",
+  "tencentKeyJs": "",
   "routeProvider": "",
   "fuel": {
     "consumptionLPer100km": 8,
@@ -25,5 +26,5 @@
     "perPersonPerDay": 80,
     "_说明": "餐饮估算:每人每天餐标"
   },
-  "_说明": "routeProvider=路线来源(留空自动:有高德 Key 用高德,否则有腾讯 Key 用腾讯,都没有就直线估算;可显式写 amap/tencent/estimate)。tencentKeyWeb=腾讯位置服务 Key(驾车路线规划)。amapKeyWeb=Web服务类型(路径规划,只需 Key),amapKeyJs=Web端JS API(地图显示);amapSecurityJsCode=JS API 的安全密钥,2021-12-02 之后申请的 Key 必须成对填写(在控制台同一个应用下)。都在 lbs.amap.com 创建;flightCityPinyin=常住城市拼音(12306 无票时「查机票」跳携程用,目的地取区域库 hub.flightCity)"
+  "_说明": "routeProvider=路线来源(留空自动:有高德 Key 用高德,否则有腾讯 Key 用腾讯,都没有就直线估算;可显式写 amap/tencent/estimate)。tencentKeyWeb=腾讯位置服务 Key(驾车路线规划);tencentKeyJs=同一把 Key 也可用于地图(实测:腾讯的 Key 一把通吃,勾 WebServiceAPI 后 JavaScript API GL 即可用,无需白名单);留空则回落到 tencentKeyWeb。amapKeyWeb=Web服务类型(路径规划,只需 Key),amapKeyJs=Web端JS API(地图显示);amapSecurityJsCode=JS API 的安全密钥,2021-12-02 之后申请的 Key 必须成对填写(在控制台同一个应用下)。都在 lbs.amap.com 创建;flightCityPinyin=常住城市拼音(12306 无票时「查机票」跳携程用,目的地取区域库 hub.flightCity)"
 }

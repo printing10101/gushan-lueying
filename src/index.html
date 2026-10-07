@@ -13,10 +13,11 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'none';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webapi.amap.com https://*.amap.com https://map.qq.com https://*.map.qq.com;
-    style-src 'self' 'unsafe-inline' https://webapi.amap.com https://*.amap.com https://map.qq.com https://*.map.qq.com;
-    img-src 'self' data: blob: https://*.amap.com https://amap.com https://*.map.qq.com https://map.qq.com;
+    style-src 'self' 'unsafe-inline' https://webapi.amap.com https://*.amap.com https://map.qq.com https://*.map.qq.com https://mapapi.qq.com https://*.qpic.cn;
+    img-src 'self' data: blob: https://*.amap.com https://amap.com https://*.map.qq.com https://map.qq.com https://mapapi.qq.com https://*.gtimg.com https://*.qpic.cn;
     font-src 'self' data: https://*.amap.com https://*.map.qq.com;
-    connect-src 'self' https://webapi.amap.com https://*.amap.com https://apis.map.qq.com https://*.map.qq.com;
+    connect-src 'self' https://webapi.amap.com https://*.amap.com https://apis.map.qq.com https://*.map.qq.com https://mapapi.qq.com https://*.gtimg.com https://*.qpic.cn;
+    worker-src 'self' blob:;
     form-action 'none';
     base-uri 'none';
     object-src 'none';
@@ -392,6 +393,8 @@
   <!-- trip-markdown 必须在 app.js 之前:导出行程走 LIB.tripMarkdown.tripToMarkdown,
        漏了这个标签要等用户点「导出」才炸(undefined 读属性),不点测不出来 -->
   <script src="../lib/trip-markdown.js"></script>
+  <!-- 地图实现层:高德/腾讯两套 SDK 藏在它后面(app.js 不直接碰任何一家的 API) -->
+  <script src="../lib/map-impl.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

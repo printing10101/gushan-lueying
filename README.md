@@ -59,7 +59,8 @@ npm run lint         # 只跑 ESLint;npm run lint:fix 自动修可修项
 npm run smoke:rail   # 12306 接口冒烟:余票+票价字段是否仍有效(结果在 scripts/smoke-output.txt)
 npm run smoke:region # 区域端到端冒烟:真实 12306+天气;没 Key 时驾车段走 app 自己的直线估算(GUSHAN_MOCK_DRIVE=0 走真实高德)
 npm run smoke:dom    # 渲染层 DOM 冒烟:npm test 已包含,单独跑是为了改 UI 时快速验证
-npm run smoke:serve  # 「本地 http 来源」冒烟:验证 GUSHAN_SERVE=1 时能从 http://127.0.0.1 起窗口
+npm run smoke:serve  # 「本地 http 来源」冒烟:验证 GUSHAN_SERVE=1 时从 http://127.0.0.1 起窗口,且腾讯地图真的出图
+npx electron test/gl-probe.cjs   # 一次性探针:换 Key 后先验"这把 Key 能不能画地图"(不污染任何数据)
 npm run preview      # 生成假数据预览页并起本地服务,改样式/交互时免启动应用直接看效果
 npm run dist         # 打包 portable exe → dist/
 ```
@@ -350,6 +351,15 @@ wannan 4→5、sanxia 3→5。
 - **票价的三种"没有价"要分清**:预售期外(过些天再查就有)、接口失败(12306 会连续几分钟返回非 JSON,
   实测过)、确实没有可购车次。前两种现在会填**占位估算**(往返实价 ÷ 2 × 人数,复用推荐页那套),
   页面明写"占位估算,出发前请复核",不再让预算留空洞;连占位价都拿不到时说清原因、金额仍为 null。
+- **地图:腾讯 GL 已接通(2026-10-08 实测)**,实现层在 `lib/map-impl.js`(高德/腾讯两套 SDK 藏在它后面,
+  `app.js` 不出现任何一家的 API 名)。三条实测结论:**腾讯的 Key 一把通吃**(控制台勾 WebServiceAPI 即可,
+  JavaScript API GL 自动可用,**不需要单独建 Key、也不需要白名单**);**腾讯拒绝 `file://`**,
+  只能在 `http://127.0.0.1` 来源下用;`GUSHAN_SERVE=1 npm run app` 即以本地 http 启动(默认仍是 file://)。
+  CSP 要为 GL 放行四组域(实测逐个抓出来的):`map.qq.com`(SDK)、`mapapi.qq.com`(字形/图标)、
+  `*.gtimg.com`(瓦片)、`*.qpic.cn`(样式),以及 **`worker-src 'self' blob:`**——GL 引擎用 blob worker
+  解码瓦片,不放开则"canvas 建起来了但一个瓦片都不请求",页面看着像加载失败。
+  **已知差异**:腾讯底图是默认矢量样式,没有高德那条 `darkblue` 的夜色主题,观感与界面不完全一致;
+  不拿 CSS 滤镜假装一致。
 - **地图画真实路线的"来源问题"(spike,默认关闭)**:腾讯 GL 的官方原文是"不再支持 file:// 方式使用
   Javascript API GL",而本应用一直用 `loadFile` 加载,所以那条路要先解决"来源"。做法:加一个
   **只绑回环、随机端口、只读仓库内文件**的本地静态服务,设 `GUSHAN_SERVE=1` 时改用

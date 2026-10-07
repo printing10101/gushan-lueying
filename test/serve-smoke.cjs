@@ -41,6 +41,12 @@ app.whenReady().then(async () => {
   const evalIn = (code) => win.webContents.executeJavaScript(`(async () => {${code}})()`);
 
   try {
+    // ---- 启动横幅:任何 initInner 抛错都会在这里留一条「启动失败:…」 ----
+    // 这是「删函数 / 锚点改错」这类事故唯一可靠的抓手:页面大部分照样渲染(卡片来自 initLibrary,
+    // 它在抛错点之前),所以只查「卡片有没有」会漏掉整段功能静默失效 —— 本轮真踩过一次。
+    const bootBanner = await evalIn("return ([...document.querySelectorAll('body > p.warn')].map((p) => p.textContent).find((t) => t.includes('启动失败')) || '').slice(0, 160);");
+    check('没有启动失败横幅', bootBanner === '', bootBanner || '(无)');
+
     const loc = await evalIn('return { href: location.href, origin: location.origin };');
     check('页面来源是 http://127.0.0.1:端口(不是 file://)',
       /^http:\/\/127\.0\.0\.1:\d+$/.test(loc.origin), loc.origin);
@@ -58,6 +64,16 @@ app.whenReady().then(async () => {
     const cards = await evalIn("return document.querySelectorAll('#lib-list details.route').length;");
     check('线路库卡片渲染出来了', cards > 100, `卡片 ${cards}`);
 
+    // ---- 地图:http 来源下应真的用腾讯 GL 出图(这是加 GUSHAN_SERVE 的全部理由) ----
+    // 判据不依赖具体标签名:SDK 有没有加载 + 容器里有没有它生成的内容。
+    let mapReady = { tmap: 'undefined', children: 0 };
+    for (let i = 0; i < 24; i++) {
+      await sleep(500);
+      mapReady = await evalIn("return { tmap: typeof TMap, children: document.getElementById('map').children.length, hint: (document.getElementById('config-hint').textContent || '').slice(0, 80) };");
+      if (mapReady.children > 0) break;
+    }
+    check('腾讯 GL 的 SDK 在页面里加载了(http 来源 + 已配 Key)', mapReady.tmap === 'object', `TMap=${mapReady.tmap} | 提示:${mapReady.hint}`);
+    check('地图容器里有 SDK 渲染出的内容(不是空白)', mapReady.children > 0, `子节点 ${mapReady.children}`);
     // 记录事实:http 来源下同机进程能 GET 到仓库内的数据文件(这是换来源的固有代价)
     const probe = await evalIn(`
       const r = await fetch('/data/config.json');

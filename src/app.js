@@ -15,6 +15,8 @@ const { pickSeat: seatPick } = LIB.seat;
 const { SCENERY: SCENERY_TAGS } = LIB.recommend;
 // 落地花费的公式只在 lib/budget.js 一份(推荐页与路线库卡片都用它),这里加前缀解构防撞名
 const { landBudget: budgetLand, oneTimeCosts: oneTimeOf } = LIB.budget;
+// 地图实现层:高德 / 腾讯 GL 两套 SDK 藏在 lib/map-impl.js 后面,这里不出现任何一家的 API 名
+const { pickMapImpl: pickMapOf, centerOf: mapCenterOf } = LIB.mapImpl;
 const { GRADE_LABELS: GRADE_TEXT } = LIB.grading;
 const { summitTemp: summitTempOf, gearChecklist: gearChecklistOf } = LIB.gear;
 const { quickFacts: quickFactsOf } = LIB.quickfacts;
@@ -34,9 +36,7 @@ function esc(v) {
 
 // 难度星级文案来自 GushanLib.grading,不再本地手抄
 
-let map = null;
-let regionOverlay = null;
-let tripOverlay = null;
+// 地图状态已收进 mapCtx(见 lib/map-impl.js):这里不再持有 SDK 对象与图层引用
 let currentTrip = null; // 当前展示的行程,车次切换/导出等操作都基于它
 let bodyState = null; // RunOS 身体状态与逐线匹配结论,启动时异步拉取
 let regionCache = {}; // 启动时一次载入的区域库,画图/行程复用,免反复 IPC
@@ -106,13 +106,13 @@ async function initInner() {
   }
   checkOriginVsHub(); // 回填后也要判一次:上次存的站可能正等于这次选的区域枢纽
 
-  // 高德脚本后台加载,不挡规划表单交互;就绪后补画当前区域与已展示的行程
-  if (cfg?.amapKeyJs) bootMap(cfg.amapKeyJs, cfg.amapSecurityJsCode);
-  else {
-    $('config-hint').textContent = '未配置高德 Key:请在 data/config.json 填入 amapKeyJs(地图)、'
-      + 'amapKeyWeb(路径规划);2021-12-02 之后申请的 JS API Key 还要填 amapSecurityJsCode(安全密钥)';
-    $('map').innerHTML = '<p class="muted map-empty">地图需要高德 JS API Key,填写后重启应用</p>';
-  }
+  // 地图后台加载,不挡规划表单交互;就绪后补画当前区域与已展示的行程。
+  // 实现层决定用哪家(腾讯需要非 file:// 来源)。**必须 catch**:不接的话任何异常
+  // 都会变成未处理的 promise 拒绝——页面上什么都不显示,看着像"地图就是不出现",
+  // 实际是报错被吞了(本地 http 来源 spike 时就这么被吞过一次)。
+  bootMap().catch((e) => {
+    $('config-hint').textContent = `地图初始化异常:${e.message}`;
+  });
   renderConfigGaps(cfg);
 
   // 出发站输入:输入 2+ 字后联想(规划页与推荐页共用同一实现)
@@ -120,95 +120,6 @@ async function initInner() {
 
   $('generate').onclick = generateTrip;
   $('trail').addEventListener('change', updateTrailFitHint);
-}
-
-// 地图启动与失败重试:失败后给"重试"按钮,不必为一次网络抖动重启应用
-function bootMap(key, securityCode) {
-  loadAmap(key, securityCode).then(() => {
-    initMap();
-    drawRegion(regionCache[$('region').value]);
-    if (currentTrip) drawTrip(currentTrip, regionCache[currentTrip.input.regionId]);
-  }).catch(() => {
-    $('map').innerHTML = '<p class="muted map-empty">高德 JS API 加载失败,检查网络后<button id="map-retry" class="mark-btn">重试</button></p>';
-    $('map-retry').onclick = () => {
-      $('map').innerHTML = '<p class="muted map-empty">正在重新加载…</p>';
-      bootMap(key, securityCode);
-    };
-  });
-}
-
-// 安全密钥必须在 <script> 加载**之前**挂到 window 上:高德自 2021-12-02 起要求
-// 「Key + 安全密钥」配对使用,只填 Key 会在服务调用时报 INVALID_USER_SCODE
-// (报错发生在高德内部的服务里,页面上只看到地图空着,极难自查)。
-// 返回 false 表示没配——旧 Key(2021-12-02 之前申请)不需要它,所以不配置不算错。
-function applyAmapSecurityCode(code) {
-  if (!code) return false;
-  window._AMapSecurityConfig = { securityJsCode: String(code) };
-  return true;
-}
-
-function loadAmap(key, securityCode) {
-  applyAmapSecurityCode(securityCode);
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = `https://webapi.amap.com/maps?v=2.0&key=${key}`;
-    s.onload = resolve;
-    s.onerror = () => reject(new Error('高德 JS API 加载失败'));
-    document.head.append(s);
-  });
-}
-
-function initMap() {
-  // 深蓝底图与夜色主题一体;标记标签的玻璃样式在 style.css 里覆盖 .amap-marker-label
-  map = new AMap.Map('map', { zoom: 8, center: [102.6, 30.6], mapStyle: 'amap://styles/darkblue' });
-}
-
-function drawRegion(region) {
-  if (!map || !region) return;
-  if (regionOverlay) map.remove(regionOverlay);
-  regionOverlay = [];
-  const path = region.loop.map((n) => [n.lng, n.lat]);
-  regionOverlay.push(new AMap.Polyline({ path, strokeColor: '#7fb0f2', strokeWeight: 3, strokeOpacity: 0.9 }));
-  for (const n of region.loop) {
-    regionOverlay.push(new AMap.Marker({
-      position: [n.lng, n.lat], label: { content: n.name, direction: 'top' },
-    }));
-  }
-  map.add(regionOverlay);
-  map.setFitView(regionOverlay);
-}
-
-// 按区域重建徒步线路下拉(切区域必须重建,否则选项还是上个区域的)
-// 数据直接用启动时载入的 libTrails,不再每次走 IPC 往返
-function refreshTrailOptions(regionId, selectedId = '', secondId = '') {
-  $('trail').innerHTML = '<option value="">自动挑选</option>';
-  $('trail2').innerHTML = '<option value="">不加</option>';
-  for (const t of libTrails) {
-    if (t.regionId === regionId) {
-      // 星数与文字必须同用人工评级;_grade.label 是指标建议级,只作详情页交叉校验展示
-      const label = `${t.name}(★${t.grade} ${GRADE_TEXT[t.grade] || ''})`;
-      $('trail').append(new Option(label, t.id));
-      $('trail2').append(new Option(label, t.id));
-    }
-  }
-  $('trail').value = selectedId || '';
-  $('trail2').value = secondId || '';
-  updateTrailFitHint();
-}
-
-// 区域提示条:最佳季节与路况提示来自 regions.json,出发前必看
-function renderRegionBrief(region) {
-  const el = $('region-brief');
-  if (!region || (!region.bestSeason && !(region.notes || []).length)) {
-    el.hidden = true;
-    return;
-  }
-  el.innerHTML =
-    `${region.bestSeason ? `<p><b>最佳季节</b>${esc(region.bestSeason)}</p>` : ''}` +
-    ((region.notes || []).length
-      ? `<p><b>路况提示</b><ul>${region.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></p>`
-      : '');
-  el.hidden = false;
 }
 
 // 配置漂移提示:example 有而 config 没有的键位(主进程 readData('config') 附带 _gaps)。
@@ -244,48 +155,80 @@ function checkOriginVsHub() {
   box.textContent = `出发站「${hub}」就是该区域的枢纽站,同站车次没有意义:请改成你真正出发的车站`;
 }
 
-// 高德 polyline("lng,lat;lng,lat;…")→ [[lng,lat],…],坏点直接丢
-function polylineToPath(str) {
-  return String(str || '').split(';')
-    .map((p) => p.split(',').map(Number))
-    .filter((p) => p.length === 2 && p.every(Number.isFinite));
+// 按区域重建徒步线路下拉(切区域必须重建,否则选项还是上个区域的)
+// 数据直接用启动时载入的 libTrails,不再每次走 IPC 往返
+function refreshTrailOptions(regionId, selectedId = '', secondId = '') {
+  $('trail').innerHTML = '<option value="">自动挑选</option>';
+  $('trail2').innerHTML = '<option value="">不加</option>';
+  for (const t of libTrails) {
+    if (t.regionId === regionId) {
+      // 星数与文字必须同用人工评级;_grade.label 是指标建议级,只作详情页交叉校验展示
+      const label = `${t.name}(★${t.grade} ${GRADE_TEXT[t.grade] || ''})`;
+      $('trail').append(new Option(label, t.id));
+      $('trail2').append(new Option(label, t.id));
+    }
+  }
+  $('trail').value = selectedId || '';
+  $('trail2').value = secondId || '';
+  updateTrailFitHint();
+}
+
+// 区域提示条:最佳季节与路况提示来自 regions.json,出发前必看
+function renderRegionBrief(region) {
+  const el = $('region-brief');
+  if (!region || (!region.bestSeason && !(region.notes || []).length)) {
+    el.hidden = true;
+    return;
+  }
+  el.innerHTML =
+    `${region.bestSeason ? `<p><b>最佳季节</b>${esc(region.bestSeason)}</p>` : ''}` +
+    ((region.notes || []).length
+      ? `<p><b>路况提示</b><ul>${region.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></p>`
+      : '');
+  el.hidden = false;
+}
+
+// ---------- 地图 ----------
+// 实现层决定用高德还是腾讯(见 lib/map-impl.js),这里只管"什么时候加载、失败怎么办"。
+// 腾讯 GL 不接受 file:// 来源:file:// 下即使配了腾讯 Key 也不会选它(那会白屏),
+// 而是给出一句可执行的提示(用 GUSHAN_SERVE=1 以 http://127.0.0.1 启动)。
+let mapCtx = null; // { impl, handle } —— 地图实现与画布句柄
+
+function drawRegion(region) {
+  if (mapCtx && region) mapCtx.impl.drawRegion(mapCtx.handle, region);
 }
 
 function drawTrip(trip, region) {
-  if (!map || !region) return; // 存档指向的区域可能已从 regions.json 移除,此时只画不成就行
-  if (tripOverlay) map.remove(tripOverlay);
-  tripOverlay = [];
-  for (const day of trip.schedule) {
-    if (day.type !== 'drive') continue;
-    for (const leg of day.legs) {
-      // 真实驾车路线(生成时抽稀落盘);旧档没有 path 就退回节点直线
-      const real = polylineToPath(leg.path);
-      if (real.length > 1) {
-        tripOverlay.push(new AMap.Polyline({
-          path: real, strokeColor: '#e8a54b', strokeWeight: 5, strokeOpacity: 0.85,
-        }));
-        continue;
-      }
-      const from = region.loop.find((n) => n.name === leg.from);
-      const to = region.loop.find((n) => n.name === leg.to);
-      if (from && to) {
-        tripOverlay.push(new AMap.Polyline({
-          path: [[from.lng, from.lat], [to.lng, to.lat]],
-          strokeColor: '#e8a54b', strokeWeight: 5, strokeOpacity: 0.85,
-        }));
-      }
-    }
-  }
-  if (trip.trail) {
-    tripOverlay.push(new AMap.Marker({
-      position: [trip.trail.start.lng, trip.trail.start.lat],
-      label: { content: `⛰ ${trip.trail.name}`, direction: 'top' },
-    }));
-  }
-  map.add(tripOverlay);
-  map.setFitView(tripOverlay);
+  if (mapCtx && region) mapCtx.impl.drawTrip(mapCtx.handle, trip, region);
 }
 
+async function bootMap() {
+  const pick = pickMapOf(appCfg);
+  if (!pick.impl) {
+    $('map').innerHTML = `<p class="muted map-empty">${esc(pick.reason)}</p>`;
+    if (pick.blocked === 'tencent') {
+      $('config-hint').textContent = '腾讯地图需要在本地 http 来源下使用(官方不支持 file://):'
+        + '用 `GUSHAN_SERVE=1 npm run app` 启动即可出图';
+    } else {
+      $('config-hint').textContent = '未配置地图 Key:请在 data/config.json 填 amapKeyJs(高德)或 tencentKeyJs(腾讯)';
+    }
+    return;
+  }
+  try {
+    await pick.impl.load(pick.key, { securityCode: appCfg.amapSecurityJsCode });
+    const region = regionCache[$('region').value];
+    mapCtx = { impl: pick.impl, handle: pick.impl.make($('map'), { center: mapCenterOf(region), zoom: 8 }) };
+    drawRegion(region);
+    if (currentTrip) drawTrip(currentTrip, regionCache[currentTrip.input.regionId]);
+  } catch (e) {
+    $('map').innerHTML = `<p class="muted map-empty">${esc(pick.impl.label)}地图加载失败(${esc(e.message)}),`
+      + '检查网络后<button id="map-retry" class="mark-btn">重试</button></p>';
+    $('map-retry').onclick = () => {
+      $('map').innerHTML = '<p class="muted map-empty">正在重新加载…</p>';
+      bootMap();
+    };
+  }
+}
 async function generateTrip() {
   const input = {
     regionId: $('region').value,

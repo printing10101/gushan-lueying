@@ -72,6 +72,12 @@ app.whenReady().then(async () => {
   const evalIn = (code) => win.webContents.executeJavaScript(`(() => {${code}})()`);
 
   try {
+    // ---- 启动横幅:任何 initInner 抛错都会在这里留一条「启动失败:…」 ----
+    // 这是「删函数 / 锚点改错」这类事故唯一可靠的抓手:页面大部分照样渲染(卡片来自 initLibrary,
+    // 它在抛错点之前),所以只查「卡片有没有」会漏掉整段功能静默失效 —— 本轮真踩过一次。
+    const bootBanner = await evalIn("return ([...document.querySelectorAll('body > p.warn')].map((p) => p.textContent).find((t) => t.includes('启动失败')) || '').slice(0, 160);");
+    check('没有启动失败横幅', bootBanner === '', bootBanner || '(无)');
+
     const opts = await evalIn(`
       const sel = document.getElementById('lib-alt');
       if (!sel) return null;
