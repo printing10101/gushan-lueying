@@ -26,6 +26,8 @@ const fitness = require('../lib/fitness');
 // 所以要先能给出一个 http 来源(白名单才有东西可填)。
 // 只在 GUSHAN_SERVE=1 时启用:默认路径完全不变,行为可回退(先验证可行性再决定是否默认开)。
 // 安全面:只监听 127.0.0.1、只读仓库内文件、拒绝目录穿越、不解析也不执行任何东西。
+const SERVE_ALLOW_TOP = new Set(['src', 'lib']); // 本地静态服务只服务这两个目录
+
 function startLocalServer() {
   const ROOT = path.join(__dirname, '..');
   const MIME = {
@@ -37,7 +39,8 @@ function startLocalServer() {
   const server = http.createServer((req, res) => {
     // 路径守卫抽在 lib/static-guard.js:它没法从渲染层测(浏览器会先把 ../ 规范化掉),
     // 所以只有原始 HTTP 请求会撞上它,靠单测盯着。
-    const file = resolveStaticPath(ROOT, req.url);
+    // 只放行 src/ 与 lib/:页面要的脚本样式都在这里,而 data/(Key、行程)一律不出网口
+    const file = resolveStaticPath(ROOT, req.url, { allowTop: SERVE_ALLOW_TOP });
     if (!file) { res.writeHead(403); res.end('forbidden'); return; }
     let st;
     try { st = fs.statSync(file); } catch { res.writeHead(404); res.end('not found'); return; }

@@ -74,12 +74,15 @@ app.whenReady().then(async () => {
     }
     check('腾讯 GL 的 SDK 在页面里加载了(http 来源 + 已配 Key)', mapReady.tmap === 'object', `TMap=${mapReady.tmap} | 提示:${mapReady.hint}`);
     check('地图容器里有 SDK 渲染出的内容(不是空白)', mapReady.children > 0, `子节点 ${mapReady.children}`);
-    // 记录事实:http 来源下同机进程能 GET 到仓库内的数据文件(这是换来源的固有代价)
+    // ---- 数据文件不该从本地端口读出来:静态服务只放行 src/ 与 lib/ ----
+    // 这是"来源换 http"的代价被收窄的证据:地图只需要源码,data/(含地图 Key 与个人行程)一律 403。
     const probe = await evalIn(`
       const r = await fetch('/data/config.json');
-      return { status: r.status, len: (await r.text()).length };`);
-    results.push(`INFO  http 来源下 /data/config.json 可读(状态 ${probe.status}, ${probe.len} 字节)`
-      + ' —— 把来源从 file:// 换成 http://127.0.0.1 的固有代价,换默认前要让用户知情');
+      const r2 = await fetch('/data/trips/');
+      return { config: r.status, trips: r2.status };`);
+    check('http 端口读不到 data/config.json(白名单只放行 src/ 与 lib/)', probe.config >= 400,
+      `状态 ${probe.config}`);
+    check('http 端口读不到 data/trips/', probe.trips >= 400, `状态 ${probe.trips}`);
   } catch (e) {
     check('执行冒烟脚本', false, e.message);
   }

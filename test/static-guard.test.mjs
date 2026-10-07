@@ -43,3 +43,19 @@ test('返回的永远是根内绝对路径(不逃逸)', () => {
   assert.equal(resolveStaticPath(null, '/x'), null);
   assert.equal(resolveStaticPath(ROOT, null), ROOT, 'null 当作根请求,不抛错');
 });
+
+// ---- 目录白名单:把"整仓库可读"收窄成"只有源码可读" ----
+// 这条是实测出来的必要防线:本地 http 来源一旦成为默认,GUSHAN_SERVE 端口上的 data/config.json
+// 就是同机任何进程都能 GET 的东西(里面有地图 Key)。地图只需要 src/ 与 lib/,别的都不放行。
+test('allowTop:给了白名单就只放行那几个顶层目录,data/ 一律拒绝', () => {
+  const allow = new Set(['src', 'lib']);
+  assert.ok(resolveStaticPath(ROOT, '/src/index.html', { allowTop: allow }));
+  assert.ok(resolveStaticPath(ROOT, '/lib/planner.js', { allowTop: allow }));
+  for (const p of ['/data/config.json', '/data/trips/x.json', '/package.json', '/electron/main.js', '/']) {
+    assert.equal(resolveStaticPath(ROOT, p, { allowTop: allow }), null, '不该放行: ' + p);
+  }
+  // 不带白名单时行为不变(其它调用方/测试仍按整仓库语义)
+  assert.ok(resolveStaticPath(ROOT, '/data/config.json'));
+  // 目录穿越在白名单下依然被挡(两道防线叠加,顺序不影响结论)
+  assert.equal(resolveStaticPath(ROOT, '/src/../../data/config.json', { allowTop: allow }), null);
+});
