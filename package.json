@@ -2,6 +2,7 @@
   "name": "gushan-lueying",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "孤山掠影:自驾×徒步混合行程规划桌面应用(自用)",
   "main": "electron/main.js",
   "productName": "孤山掠影",
