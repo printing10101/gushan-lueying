@@ -376,6 +376,11 @@ app.whenReady().then(async () => {
       tripUi.hikeText.slice(0, 140));
     check('天气条每格带日出–日落', /06:28–17:20/.test(tripUi.strip), tripUi.strip.slice(0, 120));
     check('绕行段给出独立提示', /真实里程是直线距离的 38 倍/.test(tripUi.resultText), tripUi.resultText.slice(0, 160));
+    const packBtn = await evalIn(`
+      const b = document.getElementById('trip-pack');
+      return { has: !!b, wired: !!(b && typeof b.onclick === 'function'), label: b ? b.textContent : '' };`);
+    check('合成行程上出现「导出离线包」按钮', packBtn.has === true, JSON.stringify(packBtn));
+    check('「导出离线包」按钮已接线(不是只有标签)', packBtn.wired === true);
     check('去程没票时写明原因(预售期 / 真没车 / 取价失败三者之一)',
       /超出 12306 预售期|没有可购车次|取价失败/.test(tripUi.resultText), tripUi.resultText.slice(0, 160));
 

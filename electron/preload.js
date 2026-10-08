@@ -16,5 +16,6 @@ contextBridge.exposeInMainWorld('gushan', {
   exportTrip: (defaultName, markdown) => ipcRenderer.invoke('trip:export', { defaultName, markdown }),
   exportGpx: (tripId) => ipcRenderer.invoke('trip:exportGpx', { tripId }),
   importGpx: (payload) => ipcRenderer.invoke('gpx:import', payload),
+  exportPack: (tripId) => ipcRenderer.invoke('trip:exportPack', { tripId }),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 });

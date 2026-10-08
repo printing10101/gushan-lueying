@@ -477,6 +477,7 @@ function tripOpsHtml() {
   return `<div class="trip-ops">
     <button id="trip-export">导出 Markdown</button>
     <button id="trip-gpx" title="导成 GPX 带到手机/手表:山区没信号时按清单要求得有离线轨迹">导出 GPX</button>
+    <button id="trip-pack" title="一次产出四个文件(行程/轨迹/行前清单/存档),山区没网时一次拿全">导出离线包</button>
     <button id="trip-print">打印</button></div>`;
 }
 
@@ -506,6 +507,20 @@ async function exportTripGpx() {
       + ` —— 轨迹点 ${res.points} 个${res.note ? `,${res.note}` : ''}`;
   } catch (e) {
     alert(`导出 GPX 失败:${e.message}`);
+  }
+}
+
+// 导出离线包:一次产出"行程.md / 驾车轨迹.gpx / 行前清单.md / 存档.json"到一个新文件夹。
+// 返回里带逐文件清单,少写一个都要说出来——批量导出最容易在这里骗人。
+async function exportTripPack() {
+  if (!currentTrip) return;
+  if (!gushan.exportPack) { alert('当前环境(预览页)不支持导出离线包'); return; }
+  try {
+    const res = await gushan.exportPack(currentTrip.id);
+    if (res.canceled) return;
+    $('left-msg').textContent = `已导出离线包:${res.dir}(共 ${res.written.length} 个文件:${res.written.join('、')})`;
+  } catch (e) {
+    alert(`导出离线包失败:${e.message}`);
   }
 }
 
@@ -616,6 +631,8 @@ async function renderResult(trip) {
   if (exportBtn) exportBtn.onclick = exportTripMd;
   const gpxBtn = $('trip-gpx');
   if (gpxBtn) gpxBtn.onclick = exportTripGpx;
+  const packBtn = $('trip-pack');
+  if (packBtn) packBtn.onclick = exportTripPack;
   const printBtn = $('trip-print');
   if (printBtn) printBtn.onclick = () => window.print();
   renderWeather(trip.weather);

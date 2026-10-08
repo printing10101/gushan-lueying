@@ -25,6 +25,7 @@ const weather = require('../lib/weather');
 const planner = require('../lib/planner');
 const grading = require('../lib/grading');
 const gpxLib = require('../lib/gpx');
+const packLib = require('../lib/pack');
 const recommend = require('../lib/recommend');
 const runos = require('../lib/runos');
 const fitness = require('../lib/fitness');
@@ -340,6 +341,36 @@ ipcMain.handle('gpx:import', wrap(async ({ trailId, token, confirmed = false }) 
   });
   return { canceled: false, file, measured, token: issuedToken, d, willWrite: Object.keys(d.apply), dryRun: true };
 }));
+// 行程 → 离线包:一次写出上路需要的四个文件(行程.md / 驾车轨迹.gpx / 行前清单.md / 存档.json)。
+// 内容由 lib/pack.js 的纯函数生成(与界面上的导出按钮共用同一套实现);
+// 这里只负责"选目录、建子目录、写盘",并且**逐文件报告写入结果**——
+// 少写一个文件却报成功,是这类批量导出最容易骗人的地方。
+ipcMain.handle('trip:exportPack', async (_event, { tripId }) => {
+  if (!/^[A-Za-z0-9_-]+$/.test(String(tripId || ''))) throw new Error(`非法的行程 id: ${tripId}`);
+  const trip = store.read(`trips/${tripId}`);
+  if (!trip) throw new Error(`存档 ${tripId} 不存在,无法导出离线包`);
+  const region = (store.read('regions') || {})[trip.input?.regionId];
+  const win = BrowserWindow.getAllWindows()[0];
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: '选择离线包保存位置(会在其中新建一个文件夹)',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (canceled || !filePaths[0]) return { canceled: true };
+  const dir = path.join(filePaths[0], packLib.packDirName(trip));
+  fs.mkdirSync(dir, { recursive: true });
+  const files = packLib.packFiles(trip, region, { gradeLabels: grading.GRADE_LABELS });
+  const written = [];
+  for (const f of files) {
+    const target = path.join(dir, f.name);
+    try {
+      fs.writeFileSync(target, f.content, 'utf8');
+      written.push(f.name);
+    } catch (e) {
+      throw new Error(`写入 ${f.name} 失败:${e.message}(已写 ${written.length}/${files.length} 个文件)`);
+    }
+  }
+  return { canceled: false, dir, written };
+});
 // 外链兜底(如无火车票时查机票):只放行 https,防止渲染层被诱导开任意协议
 ipcMain.handle('shell:openExternal', wrap((url) => {
   if (typeof url !== 'string' || !/^https:\/\/.+/.test(url)) throw new Error(`只允许打开 https 链接: ${url}`);
