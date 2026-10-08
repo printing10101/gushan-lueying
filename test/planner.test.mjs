@@ -226,10 +226,20 @@ test('railBudgetItem:有票时照旧走实价,不受占位逻辑影响', () => {
   assert.match(it.note, /D117 二等座 ×3人/);
 });
 
-test('hikeBudgetItem:门票按人头,未标注按 0', () => {
-  assert.equal(hikeBudgetItem({ name: '测试线', tickets: 60 }, 3).amount, 180);
-  assert.ok(hikeBudgetItem({ name: '测试线', tickets: 60 }, 3).note.includes('3 人'));
-  assert.equal(hikeBudgetItem({ name: '测试线' }, 2).amount, 0);
+test('hikeBudgetItem:门票按人头;未标注是"未知"而不是 0 元', () => {
+  const paid = hikeBudgetItem({ name: '测试线', tickets: 60 }, 3);
+  assert.equal(paid.amount, 180);
+  assert.ok(paid.note.includes('3 人'));
+  // 曾经这里 `tickets ?? 0` 把"没查过"算成 ¥0 还声称"来自线路库门票字段",
+  // 而 budget.ticketItem(推荐页)是如实报"未标注"的——同一件事两条口径。
+  // 2026-10-08 清掉 59 条无出处的 0 之后这个不一致才暴露出来。
+  const unknown = hikeBudgetItem({ name: '测试线' }, 2);
+  assert.equal(unknown.amount, null, '未标注必须是不计入合计,不是 0 元');
+  assert.match(unknown.note, /未标注门票/, '要如实说是未标注');
+  assert.match(unknown.note, /不是 0 元/, '要挡住"看着像免费"的误读');
+  // 有出处的免票(0 元)仍然可以是 0——那种"0"是查过的结论,不是猜的
+  const free = hikeBudgetItem({ name: '测试线', tickets: 0, ticketSource: { source: '官网', checkedAt: '2026-10-08' } }, 2);
+  assert.equal(free.amount, 0, '有出处的免票就该是 0');
 });
 
 // ---------- 回程无票的时刻衔接(回归:曾崩在 planner.js) ----------

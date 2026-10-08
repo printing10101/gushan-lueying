@@ -308,6 +308,13 @@ test('门票字段:ticketSource 必须与数字配套,且来源信息不能空',
     if (t.ticketNote !== undefined && typeof t.ticketNote !== 'string') bad.push(`${id}: ticketNote 必须是字符串`);
     // 明确允许:有说明但故意不填数字(查过但来源矛盾)
     if (t.tickets === null && t.ticketNote === undefined) bad.push(`${id}: 留空门票时必须写明为什么(用 ticketNote)`);
+    // 免票(0 元)必须有出处:0 会**静默进入预算合计**(等于告诉用户"这段不要钱"),
+    // 没有出处的 0 就是"假装知道"。查过但找不到出处时正确做法是留空(未知),不是填 0。
+    // 2026-10-08 实测:库里有 59 条 `tickets: 0` 全部没有 ticketSource,已一律改为未知。
+    // 这条是**反向**防线——上面那条只挡"有来源却没数字",挡不住"没来源硬填 0"。
+    if (t.tickets === 0 && t.ticketSource === undefined) {
+      bad.push(`${id}: 免票(0 元)必须给出处 ticketSource;没有出处就别填 0,留空表示未知`);
+    }
   }
   assert.deepEqual(bad, [], bad.join('\n   '));
 });
