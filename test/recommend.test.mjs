@@ -255,3 +255,22 @@ test('stayCfgFor/regionStayMap:区域基准字段级覆盖 config', () => {
   assert.deepEqual(stayCfgFor({ lodging: { perRoomPerNight: 300, tierFactors: { 经济: 0.5, 舒适: 1.2 } } }, null).lodging.tierFactors,
     { 经济: 0.5, 舒适: 1.2 });
 });
+
+test('stayCfgFor:区域标了分档价就取该档绝对价(planner 路径也吃得到)', () => {
+  const region = {
+    id: 'r1', name: '测试环线',
+    stay: {
+      perRoomPerNight: 800, perPersonPerDay: 200, // 基准价:有分档价时不该被采用
+      tiers: { 客栈: { perRoomPerNight: 300, perPersonPerDay: 100 } },
+    },
+  };
+  const c = stayCfgFor({}, region);
+  assert.equal(c.lodging.perRoomPerNight, 300, '默认档(客栈)应取分档价而不是基准价 800');
+  assert.equal(c.food.perPersonPerDay, 100);
+  assert.match(c.lodging.basis, /客栈档价/, '来源要说清是哪一档的价');
+  assert.match(c.food.basis, /客栈档价/);
+  // 旧档名同样要能落到对应档
+  assert.equal(stayCfgFor({}, region, '舒适').lodging.perRoomPerNight, 300, '「舒适」等价客栈');
+  // 没标分档价的档位回落基准价
+  assert.equal(stayCfgFor({}, region, '酒店').lodging.perRoomPerNight, 800, '无分档价时回落基准价');
+});

@@ -236,6 +236,7 @@ async function generateTrip() {
     startDate: $('start-date').value,
     days: Number($('days').value),
     headcount: Number($('headcount').value) || 1,
+    tier: $('tier')?.value || '客栈',
     // 只交 trailIds 一个口径:老字段 trailId 与它并存会让"到底走几条线"各说一套
     trailIds: [$('trail').value, $('trail2').value].filter(Boolean),
   };
@@ -276,6 +277,7 @@ function saveForm() {
     localStorage.setItem(FORM_KEY, JSON.stringify({
       region: $('region').value, origin: $('origin').value, date: $('start-date').value,
       days: $('days').value, headcount: $('headcount').value,
+      tier: $('tier')?.value,
       trailIds: [$('trail').value, $('trail2').value].filter(Boolean),
     }));
   } catch { /* 存不了就算了,不影响主流程 */ }
@@ -1138,7 +1140,7 @@ function costInputs() {
   return {
     date: $('rec-date')?.value || $('start-date')?.value || null,
     headcount: toPositive($('rec-headcount')?.value) || 1,
-    tier: $('rec-tier')?.value || '舒适',
+    tier: $('rec-tier')?.value || '客栈',
   };
 }
 
@@ -1410,7 +1412,7 @@ async function runRecommend() {
     // 花费口径三要素:日期(季节系数)/人数(房间数)/档次(住宿倍数)
     date: $('rec-date').value || null,
     headcount: toPositive($('rec-headcount').value) || 1,
-    tier: $('rec-tier').value || '舒适',
+    tier: $('rec-tier').value || '客栈',
   };
   lastRecInput = input;
   if (originStation) $('rec-msg').textContent = '正在按出发站估算往返火车实价…(每个枢纽只查一次,首条推荐稍慢)';
@@ -1450,7 +1452,7 @@ function criteriaText({ budget, maxDays, scenery, province, gradeMax, date, head
   // 花费口径三要素要写在结果行上:否则用户改了日期/人数看到数字变了,却不知道是它变的
   parts.push(date ? `${date} 出行` : '未填日期(中性基准)');
   if (Number(headcount) > 1) parts.push(`${headcount} 人同行`);
-  if (tier && tier !== '舒适') parts.push(`${tier}档`);
+  if (tier && tier !== '客栈') parts.push(`${tier}档`);
   // 难度闸门:显式选的写「★N 以内」;自动收窄的写清是体能给的,让用户知道结果为什么变少
   if (Number.isFinite(gradeMax)) parts.push(`★${gradeMax} 以内`);
   else if (gate?.auto && Number.isFinite(gate.gradeMax)) parts.push(`体能上限★${gate.gradeMax} 以内`);
@@ -1459,7 +1461,7 @@ function criteriaText({ budget, maxDays, scenery, province, gradeMax, date, head
 
 function renderRecommend(list, input) {
   const gate = list.__gate || null;
-  const caliber = `落地估算按「${input.date || '未填日期(中性基准)'} / ${input.headcount || 1} 人 / ${input.tier || '舒适'}档」`
+  const caliber = `落地估算按「${input.date || '未填日期(中性基准)'} / ${input.headcount || 1} 人 / ${input.tier || '客栈'}档」`
     + (input.originStation ? ',花费含往返火车实价估算(去程价×2)' : ',未含往返大交通');
   const gateNote = gate?.auto && Number.isFinite(gate.gradeMax)
     ? ` · 已按 ${gate.bodyHint || '体能'}自动排除更高难度`

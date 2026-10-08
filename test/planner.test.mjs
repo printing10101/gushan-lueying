@@ -1,6 +1,7 @@
 import { createRequire } from 'module';
 const require = createRequire(new URL('../package.json', import.meta.url));
-const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan, buildLegs, noTrailHint, tripIdFor, dayAnchors, forecastsByDate, railBudgetItem, pickTrails, fillSpareDays, routeNote, detourInfo, DETOUR_RATIO, DETOUR_MIN_STRAIGHT_KM } = require('./lib/planner.js');
+const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan, buildLegs, noTrailHint, tripIdFor, dayAnchors, forecastsByDate, railBudgetItem, railLeg, pickTrails, fillSpareDays, routeNote, detourInfo, DETOUR_RATIO, DETOUR_MIN_STRAIGHT_KM } = require('./lib/planner.js');
+const rec = require('./lib/recommend.js');
 const test = require('node:test');
 const assert = require('node:assert');
 
@@ -97,6 +98,20 @@ test('stayBudget:配置值生效,房间数向上取整', () => {
   assert.equal(lodging.amount, 2400);
   assert.ok(lodging.note.includes('配置值'));
   assert.equal(food.amount, 1500);
+});
+
+test('stayBudget:住宿与餐饮各自标来源——只标了餐标时,住宿不得说成区域基准', () => {
+  // 走真实链路:stayCfgFor 逐项算好 basis,stayBudget 逐项取用。
+  // 此前共用一个 priced,只要区域标了任意一项,两项都会被说成「含区域基准(x)」。
+  // dianxibei 正是这种形态(只标了餐标 90、没标房费),用户会以为自己标过房费。
+  const region = { id: 'dianxibei', name: '滇西北环线', stay: { perPersonPerDay: 90 } };
+  const stayCfg = rec.stayCfgFor({}, region);
+  const [lodging, food] = stayBudget({
+    days: 3, headcount: 1, startDate: null, regionId: 'dianxibei', cfg: stayCfg,
+  });
+  assert.doesNotMatch(lodging.note, /区域基准/, `住宿未标区域基准,不许说成区域基准: ${lodging.note}`);
+  assert.match(lodging.note, /默认估算/, '住宿来源是代码默认值,要如实说');
+  assert.match(food.note, /区域基准\(滇西北环线\)/, '餐标确实来自区域基准,要保留');
 });
 
 test('stayBudget:季节系数按出发日期吃进去(国庆比平日贵,且备注写来源)', () => {

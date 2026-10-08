@@ -277,6 +277,15 @@
         <label>出行人数
           <input id="headcount" type="number" min="1" max="12" value="1">
         </label>
+        <label>住宿档次
+          <select id="tier">
+            <option value="客栈">客栈标间(基准)</option>
+            <option value="青旅">青旅床位</option>
+            <option value="酒店">酒店</option>
+          </select>
+        </label>
+        <!-- 改档不会自动重算预算,必须当场说破:改了档次以为预算跟着变,是这套估算里最容易踩的坑 -->
+        <div id="tier-msg" class="fit-hint" hidden></div>
         <label>徒步线路(可选,留空自动选)
           <select id="trail"><option value="">自动挑选</option></select>
         </label>
@@ -309,8 +318,9 @@
         <input id="rec-date" type="date" aria-label="出发日期(决定住宿/餐饮的季节系数)" title="留空则按中性基准,不算旺季">
         <input id="rec-headcount" type="number" min="1" max="12" value="1" aria-label="出行人数(决定要几间房)" title="1 人也要包整间房,不是半个">
         <select id="rec-tier" aria-label="住宿档次">
-          <option value="舒适">舒适档 ×1.0</option>
-          <option value="经济">经济档 ×0.6</option>
+          <option value="客栈">客栈标间</option>
+          <option value="青旅">青旅床位</option>
+          <option value="酒店">酒店</option>
         </select>
         <select id="rec-grade" aria-label="难度上限">
           <option value="">难度不限</option>

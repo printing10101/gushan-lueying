@@ -57,7 +57,13 @@
     ],
     "stay": {
       "perRoomPerNight": 220,
-      "perPersonPerDay": 90
+      "perPersonPerDay": 90,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 58,
+          "source": { "source": "Hostelworld 在售床位中位价(成都 9 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/chengdou/?currency=CNY", "checkedAt": "2026-10-08", "sample": 9 }
+        }
+      }
     },
     "bestSeason": "10月中旬-11月上旬(秋色)、5-6月(春花)",
     "notes": [
@@ -113,7 +119,13 @@
       }
     ],
     "stay": {
-      "perPersonPerDay": 90
+      "perPersonPerDay": 90,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 69,
+          "source": { "source": "Hostelworld 在售床位中位价(丽江 4 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/lijiang/?currency=CNY", "checkedAt": "2026-10-08", "sample": 4 }
+        }
+      }
     },
     "bestSeason": "5-6月(杜鹃花)、9-11月(秋色,梅里日照金山概率高)",
     "notes": [
@@ -350,7 +362,13 @@
     ],
     "stay": {
       "perRoomPerNight": 210,
-      "perPersonPerDay": 80
+      "perPersonPerDay": 80,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 50,
+          "source": { "source": "Hostelworld 在售床位中位价(西安 8 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/xian/?currency=CNY", "checkedAt": "2026-10-08", "sample": 8 }
+        }
+      }
     },
     "bestSeason": "5-6月(高山杜鹃)、9-10月(秋色)",
     "notes": [
@@ -514,7 +532,13 @@
     ],
     "stay": {
       "perRoomPerNight": 350,
-      "perPersonPerDay": 120
+      "perPersonPerDay": 120,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 138,
+          "source": { "source": "Hostelworld 在售床位中位价(北京 12 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/beijing/?currency=CNY", "checkedAt": "2026-10-08", "sample": 12 }
+        }
+      }
     },
     "bestSeason": "5-10月(6-8月草甸花季,10月长城秋色)",
     "notes": [
@@ -577,7 +601,13 @@
     ],
     "stay": {
       "perRoomPerNight": 260,
-      "perPersonPerDay": 100
+      "perPersonPerDay": 100,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 82,
+          "source": { "source": "Hostelworld 在售床位中位价(广州 3 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/guangshuu/?currency=CNY", "checkedAt": "2026-10-08", "sample": 3 }
+        }
+      }
     },
     "bestSeason": "11月-次年3月(秋冬最舒适,夏季高温高湿);4-5月回南天潮湿",
     "notes": [
@@ -674,7 +704,13 @@
     ],
     "stay": {
       "perRoomPerNight": 240,
-      "perPersonPerDay": 90
+      "perPersonPerDay": 90,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 70,
+          "source": { "source": "Hostelworld 在售床位中位价(杭州 8 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/hangshuu/?currency=CNY", "checkedAt": "2026-10-08", "sample": 8 }
+        }
+      }
     },
     "bestSeason": "4-5月(新绿)、9-11月(秋色);冬季浙西山区易结冰,注意防滑",
     "notes": [
@@ -724,7 +760,13 @@
     ],
     "stay": {
       "perRoomPerNight": 220,
-      "perPersonPerDay": 85
+      "perPersonPerDay": 85,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 77,
+          "source": { "source": "Hostelworld 在售床位中位价(黄山 6 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/huangshan/?currency=CNY", "checkedAt": "2026-10-08", "sample": 6 }
+        }
+      }
     },
     "bestSeason": "4-5月(油菜花+新绿)、9-11月(徽州秋色与晒秋)",
     "notes": [
@@ -897,7 +939,13 @@
     ],
     "stay": {
       "perRoomPerNight": 300,
-      "perPersonPerDay": 130
+      "perPersonPerDay": 130,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 107,
+          "source": { "source": "Hostelworld 在售床位中位价(上海 23 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/shanghai/?currency=CNY", "checkedAt": "2026-10-08", "sample": 23 }
+        }
+      }
     },
     "notes": [
       "接入:佘山九峰连穿挂松江(0km)、军嶂古道挂无锡(9km)。两条都是 10-12 月冬季线路",
@@ -945,7 +993,13 @@
     ],
     "stay": {
       "perRoomPerNight": 220,
-      "perPersonPerDay": 90
+      "perPersonPerDay": 90,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 58,
+          "source": { "source": "Hostelworld 在售床位中位价(昆明 6 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/kunming/?currency=CNY", "checkedAt": "2026-10-08", "sample": 6 }
+        }
+      }
     },
     "notes": [
       "接入:轿子雪山(4223m,★2)与雪岭火峰(4344m,★3)都挂转龙镇,两地相距仅 16km",
@@ -993,7 +1047,13 @@
     ],
     "stay": {
       "perRoomPerNight": 260,
-      "perPersonPerDay": 120
+      "perPersonPerDay": 120,
+      "tiers": {
+        "青旅": {
+          "perBedPerNight": 138,
+          "source": { "source": "Hostelworld 在售床位中位价(北京 12 家在售)", "url": "https://www.hostelworld.com/zh/lushe/yazhou/zhongguo/beijing/?currency=CNY", "checkedAt": "2026-10-08", "sample": 12 }
+        }
+      }
     },
     "notes": [
       "接入:鹿皮关长城环线(挂鹿皮关 0km)、金山岭—司马台长城(挂金山岭 0km)、黄崖关长城穿越(挂黄崖关 0km)。三条都是 1 天单日线,是长城里门槛最低的一档",

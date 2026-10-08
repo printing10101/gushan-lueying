@@ -20,7 +20,8 @@
   "lodging": {
     "perRoomPerNight": 200,
     "peoplePerRoom": 2,
-    "_说明": "住宿估算:每间每晚房价,一间住几人(人数÷每间人数向上取整算房间数,1 人也要整间房)。可选 tierFactors 覆盖档次系数,如 {\"经济\":0.6,\"舒适\":1.0};默认值在 lib/budget.js,与区域基准/季节系数同口径相乘"
+    "perBedPerNight": 74,
+    "_说明": "住宿估算:每间每晚房价,一间住几人(人数÷每间人数向上取整算房间数,1 人也要整间房)。perBedPerNight 是**青旅床位价**(按床卖,一人一床,不乘房间数也不乘档次系数)——区域在 regions.json 的 stay.tiers.青旅 里标了实测价就用区域价,没标才用这里;默认 74 来自 2026-10-08 抓取的 8 个城市 Hostelworld 在售床位中位价再取中位。可选 tierFactors 覆盖档次系数;默认值在 lib/budget.js,与区域基准/季节系数同口径相乘"
   },
   "food": {
     "perPersonPerDay": 80,
