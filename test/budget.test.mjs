@@ -350,3 +350,50 @@ test('oneTimeCosts:技术地形等级 ≥3 也触发保险项(海拔不高也可
   assert.ok(B.oneTimeCosts({ days: 1, maxAltM: 800, techLevel: 3 }, {})
     .map((i) => i.item).includes('高原保险 / 应急药品'));
 });
+
+// ---- 预算汇总的唯一实现(budgetRollup) ----
+// 它存在的理由就是"生成时"与"改动时(换车次)"不能再各算一份:
+// 2026-10-08 实测 switchTrain 只重算了 total/perPerson/unknownCount,漏掉 range,
+// 于是换车次后票价变了、区间还是旧的。所以这几条断言一半在测数值,
+// 一半在锁"区间会随 band 变"这个行为。
+test('budgetRollup:合计/人均/未含项/区间一次算清,与逐项手算一致', () => {
+  const items = [
+    { name: '住宿 2 晚', key: 'lodging', amount: 520, band: 0.3 },
+    { name: '餐饮 3 天', key: 'food', amount: 300, band: 0.25 },
+    { name: '火车去程', amount: 374, band: 0 },
+    { name: '门票', amount: null, band: 0.2 },
+  ];
+  const r = B.budgetRollup(items, 2);
+  assert.equal(r.total, 1194);
+  assert.equal(r.perPerson, 597);
+  assert.equal(r.knownCount, 3);
+  assert.equal(r.unknownCount, 1, 'amount=null 是「未含」,不是 0 元,也不该被算进合计');
+  assert.deepEqual(r.range.contributors, ['住宿 2 晚', '餐饮 3 天'], 'band=0 的实价项不进贡献者');
+  assert.equal(r.range.low, Math.round(520 * 0.7) + Math.round(300 * 0.75) + 374);
+  assert.equal(r.range.high, Math.round(520 * 1.3) + Math.round(300 * 1.25) + 374);
+});
+
+test('budgetRollup:金额不动、只把 band 从占位(25%)改成实价(0),区间必须收窄', () => {
+  // 隔离变量:金额保持一致,只有这样"区间变窄"才能归因到 band 而不是票价本身变了
+  const withBand = (band) => B.budgetRollup([
+    { name: '住宿 2 晚', amount: 520, band: B.BUDGET_BANDS.lodging },
+    { name: '火车去程', amount: 374, band },
+  ], 1);
+  const est = withBand(B.BUDGET_BANDS.railEstimate);
+  const act = withBand(B.BUDGET_BANDS.railActual);
+  assert.ok(est.range.contributors.includes('火车去程'), '占位估算车次要算进不确定来源');
+  assert.ok(!act.range.contributors.includes('火车去程'), '实价车次不再是「不确定来源」');
+  assert.ok(act.range.high - act.range.low < est.range.high - est.range.low,
+    `实价后区间必须更窄:${act.range.high - act.range.low} 应 < ${est.range.high - est.range.low}`);
+});
+
+test('budgetRollup:headcount 缺省/非法时退回 1 人,绝不产出 NaN 人均', () => {
+  const items = [{ name: 'x', amount: 100, band: 0 }];
+  assert.equal(B.budgetRollup(items).perPerson, 100);
+  assert.equal(B.budgetRollup(items, 0).perPerson, 100, '0 人退回 1 人');
+  assert.equal(B.budgetRollup(items, 'abc').perPerson, 100);
+  assert.ok(Number.isFinite(B.budgetRollup(items, NaN).perPerson));
+  // 脏金额不该被当成已知项(否则合计变 NaN,而界面上会显示 ¥NaN)
+  assert.equal(B.budgetRollup([{ name: 'y', amount: 'oops', band: 0.2 }], 1).total, 0);
+  assert.equal(B.budgetRollup([{ name: 'y', amount: 'oops', band: 0.2 }], 1).unknownCount, 1);
+});

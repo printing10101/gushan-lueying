@@ -120,6 +120,8 @@ async function initInner() {
 
   $('generate').onclick = generateTrip;
   $('trail').addEventListener('change', updateTrailFitHint);
+  // 改档次不会自动重算预算,改完立刻说破(与出发站撞枢纽同一套当场提醒的做法)
+  $('tier').addEventListener('change', checkTierVsGenerated);
 }
 
 // 配置漂移提示:example 有而 config 没有的键位(主进程 readData('config') 附带 _gaps)。
@@ -295,6 +297,10 @@ function restoreForm() {
     if (s.date) $('start-date').value = s.date;
     if (s.days) $('days').value = s.days;
     if (s.headcount) $('headcount').value = s.headcount;
+    // 档次也要记住:青旅是预算敏感的人常选的档,每次进来都退回客栈会让人反复改。
+    // 走 tierValueFor 而不是直接赋值:记忆里可能存着旧档名(经济/舒适),直接赋给
+    // select 会失败(没有那个 option),用户看到的是档位莫名回到默认。
+    if (s.tier) $('tier').value = tierValueFor('tier', s.tier);
     const savedIds = Array.isArray(s.trailIds) ? s.trailIds : (s.trailId ? [s.trailId] : []);
     if (savedIds[0] && [...$('trail').options].some((o) => o.value === savedIds[0])) {
       $('trail').value = savedIds[0];
@@ -490,6 +496,7 @@ async function exportTripMd() {
     const res = await gushan.exportTrip(`行程-${currentTrip.id}.md`,
       LIB.tripMarkdown.tripToMarkdown(currentTrip, {
         gradeLabels: GRADE_TEXT, seatOf: seatFromPrices, daylightOf: daylightPlanOf,
+        tierAlias: LIB.budget.TIER_ALIAS,
       }));
     if (!res.canceled) $('left-msg').textContent = `已导出:${res.filePath}`;
   } catch (e) {
@@ -524,6 +531,26 @@ async function exportTripPack() {
   } catch (e) {
     alert(`导出离线包失败:${e.message}`);
   }
+}
+
+// 预算汇总的唯一入口:合计 / 未含项数 / 人均 / 区间都由 items 现算,别再各处手写一份。
+// 曾经 switchTrain 只重算了前三个,漏掉 range —— 换车次后票价变了而区间没变,
+// 用户拿着一个陈旧区间(恰恰是拿它判断"带多少钱")。凡是改 items 的地方都必须走这里。
+// 真正的算法在 lib/budget.budgetRollup,与生成时是同一个函数(不只是"抄得一样")。
+function rollupBudget(trip, headcount = null) {
+  Object.assign(trip.budget, LIB.budget.budgetRollup(trip.budget.items, headcount || headcountOf(trip)));
+}
+
+// 误差区间:只在真有估算项(band>0 且合计非 0)时才显示——全实价时区间退化成一个点,
+// 把它摆出来只会制造噪音。必须把 contributors 一并说出来:band 全是估的,
+// 不写清"谁贡献了不确定",等于用数字假装精确(这是这个应用一贯的口径纪律)。
+function rangeRow(range) {
+  if (!range || !(range.band > 0) || !range.high) return '';
+  const names = (range.contributors || []).filter(Boolean);
+  const who = names.slice(0, 4).join('、');
+  const more = names.length > 4 ? ` 等 ${names.length} 项` : '';
+  return `<tr class="total"><td>区间</td><td>¥${range.low} – ¥${range.high}</td>`
+    + `<td class="muted">估算幅度 ±${range.band}%,不确定来自 ${esc(who)}${esc(more)}</td></tr>`;
 }
 
 async function renderResult(trip) {
@@ -609,9 +636,14 @@ async function renderResult(trip) {
 
   const rows = trip.budget.items.map((b) => `<tr><td>${esc(b.name)}</td><td>${b.amount === null ? '未知' : '¥' + b.amount}</td><td class="muted">${esc(b.note || '')}</td></tr>`).join('');
   const headcount = headcountOf(trip);
-  html.push(`<div class="budget"><h3>预算<span>${headcount} 人 · 油费整车均摊,火车票/门票按人头</span></h3>
+  // 住宿档次直接决定这块数字,但表格里看不出用的是哪一档(备注只在偏离基准时才提)。
+  // 基准档(客栈)写出来只是噪音;偏离基准才说——与 stayCost 的备注口径一致。
+  const tier = tierValueFor('tier', trip.input?.tier);
+  const tierBit = tier && tier !== '客栈' ? ` · 住宿按${tier}档` : '';
+  html.push(`<div class="budget"><h3>预算<span>${headcount} 人${tierBit} · 油费整车均摊,火车票/门票按人头</span></h3>
     <table>${rows}
     <tr class="total"><td>合计</td><td>¥${trip.budget.total}${trip.budget.unknownCount ? ` + ${trip.budget.unknownCount} 项未知` : ''}</td><td></td></tr>
+    ${rangeRow(trip.budget.range)}
     ${headcount > 1 ? `<tr class="total"><td>人均</td><td>¥${trip.budget.perPerson ?? Math.round(trip.budget.total / headcount)}</td><td></td></tr>` : ''}
     </table>
     ${tripOpsHtml()}
@@ -639,6 +671,9 @@ async function renderResult(trip) {
   if (printBtn) printBtn.onclick = () => window.print();
   renderWeather(trip.weather);
   drawTrip(trip, regionCache[trip.input.regionId]);
+  // 展示的行程换了一份(生成/开档/换车次/刷新天气),档次提示要跟着重算:
+  // 放在这里而不是散在几个入口,就不会有"某条路径忘了清提示"的漏网。
+  checkTierVsGenerated();
 }
 
 // 人数兜底:旧档 budget 上没有 headcount 字段,回退表单值
@@ -658,12 +693,13 @@ async function switchTrain(legKey, code) {
   const item = trip.budget.items.find((b) => b.name === label);
   if (item) {
     item.amount = leg.seat ? leg.seat.price * hc : null;
+    // band 必须跟着换:候选项都是实时查到的可购车次,票价是实价 ⇒ 该项从"占位估算(±25%)"
+    // 变成"实价(不浮动)"。只改 amount 不改 band,区间会把一个实价项继续按 ±25% 浮动
+    // (2026-10-08 加区间时漏了这处:换车次后区间仍按旧口径算,而区间恰恰是给用户判断带多少钱的)。
+    item.band = leg.seat ? LIB.budget.BUDGET_BANDS.railActual : 0;
     item.note = `${cand.code} ${leg.seat ? leg.seat.label : '票价字段缺失,请核对'}${hc > 1 ? ` ×${hc}人` : ''}`;
   }
-  const known = trip.budget.items.filter((b) => b.amount !== null);
-  trip.budget.total = known.reduce((s, b) => s + b.amount, 0);
-  trip.budget.unknownCount = trip.budget.items.length - known.length;
-  trip.budget.perPerson = Math.round(trip.budget.total / hc);
+  rollupBudget(trip, hc);
   renderResult(trip);
   // savedTo 是返回值附带的展示字段,不落盘。用 rest siblings 写法剔除,
   // 而不是解构出 const { savedTo, ...archive } —— 后者会留下一个没人用的绑定,
@@ -771,6 +807,31 @@ async function recordActualCost(id) {
   }
 }
 
+// 档名收敛:存档与 localStorage 里可能是旧名(经济/舒适),也可能已被删掉。
+// 统一收成"给定 select 里真有的值",收不到就回「客栈」——它是 planner 的基准档,
+// 也是旧存档(根本没有 tier 字段)当时实际用的档。谎报成别的档,回填出来的预算
+// 会与存档里记着的金额对不上,而用户以为只是显示问题。
+function tierValueFor(selectId, v) {
+  const opts = [...($(selectId)?.options || [])].map((o) => o.value);
+  const t = v ? ((LIB.budget?.TIER_ALIAS || {})[v] || v) : null;
+  return t && opts.includes(t) ? t : '客栈';
+}
+
+// 改档次 ≠ 预算会变:预算是「生成」那一刻按当时档次算好存档的,改下拉不会重算。
+// 与「出发站撞枢纽」同一类当场说破——这里更危险,因为下拉就在眼前、数字也就在旁边,
+// 用户很容易以为"我改成青旅了、那个数就是青旅价"。
+// 比较的是**归一化后**的档名:旧存档没这个字段时要按它当时真用的基准档(客栈)比,否则一进来就误报。
+function checkTierVsGenerated() {
+  const box = $('tier-msg');
+  if (!box) return;
+  const now = tierValueFor('tier', $('tier')?.value);
+  const used = currentTrip ? tierValueFor('tier', currentTrip.input?.tier) : null;
+  if (!used || now === used) { box.hidden = true; box.textContent = ''; return; }
+  box.hidden = false;
+  box.textContent = `住宿档次已改成「${now}」,但当前显示的还是按「${used}」算的:`
+    + '点「生成行程」才会按新档次重算预算。';
+}
+
 // 打开档案:回填规划要素并切到规划页,方便在旧行程基础上改条件重新生成
 async function openArchive(id) {
   const trip = await gushan.readData(`trips/${id}`);
@@ -786,6 +847,9 @@ async function openArchive(id) {
     if (trip.input.startDate) $('start-date').value = trip.input.startDate;
     if (trip.input.days) $('days').value = trip.input.days;
     if (trip.input.headcount) $('headcount').value = trip.input.headcount;
+    // 档次必须一起回填:不回填,界面显示「客栈」而这份存档是青旅算的,
+    // 用户改个日期重新生成,预算突然翻倍,却看不出为什么(旧存档没这个字段→回客栈基准)。
+    $('tier').value = tierValueFor('tier', trip.input.tier);
   }
   document.querySelector('#tabs [data-view="planner"]').click();
   await renderResult(trip);
@@ -978,11 +1042,13 @@ function renderLibrary() {
   wireTicketSources($('lib-list'));
 }
 
-// 「用这条线规划行程」按钮:路线库与推荐页共用,点击切到规划页并预选该线路
-function wirePlanButtons(root) {
+// 「用这条线规划行程」按钮:路线库与推荐页共用,点击切到规划页并预选该线路。
+// tierFrom 只有推荐页传:推荐页的花费是按 rec-tier 算的,不把档次带过去,
+// 用户会看到"推荐页 ¥X(青旅)→ 规划页按客栈算出的 ¥Y"——同一趟行程两个口径。
+function wirePlanButtons(root, tierFrom = null) {
   for (const btn of root.querySelectorAll('[data-plan]')) {
     const [trailId, regionId] = btn.dataset.plan.split('|');
-    btn.onclick = () => planFromLibrary(trailId, regionId);
+    btn.onclick = () => planFromLibrary(trailId, regionId, tierFrom ? $(tierFrom)?.value : null);
   }
 }
 
@@ -1106,11 +1172,18 @@ async function saveMarks() {
 }
 
 // 路线库一键规划:切到规划页并预选区域与该线路,填好日期即可生成
-async function planFromLibrary(trailId, regionId) {
+async function planFromLibrary(trailId, regionId, tier = null) {
   document.querySelector('#tabs [data-view="planner"]').click();
+  // 档次跟着过来(只有推荐页会传):推荐价是照它算的,这里不接上就是口径分家。
+  // 只接受控件里真有的档名——传进来一个不存在的值赋给 select 会静默变成空选。
+  const tierSel = $('tier');
+  if (tier && tierSel && [...tierSel.options].some((o) => o.value === tier)) tierSel.value = tier;
   $('region').value = regionId;
   $('region').onchange();
   await refreshTrailOptions(regionId, trailId);
+  // 赋值不会触发 change 事件,这里手动判一次:从推荐页带过来的档次若与当前展示的行程不同,
+  // 要立刻说破"显示的还是旧档算的"
+  checkTierVsGenerated();
 }
 
 // 入门速览:把全程总量折算成日均口径,回答「一天走多少、要爬多少、最长多久没补给」。
@@ -1389,7 +1462,9 @@ function initRecommend() {
     if (saved?.recGrade) $('rec-grade').value = String(saved.recGrade);
     if (saved?.recDate) $('rec-date').value = saved.recDate;
     if (saved?.recHeadcount) $('rec-headcount').value = String(saved.recHeadcount);
-    if (saved?.recTier) $('rec-tier').value = saved.recTier;
+    // 档名收敛统一走 tierValueFor:旧名(经济/舒适)迁移的规则只写一处,
+    // 免得改了别名表却漏掉这处(别名表在 lib/budget.TIER_ALIAS)
+    if (saved?.recTier) $('rec-tier').value = tierValueFor('rec-tier', saved.recTier);
   } catch { /* 记忆坏了当没填 */ }
   wireStationInput($('rec-origin'), $('rec-station-list'));
 }
@@ -1470,7 +1545,7 @@ function renderRecommend(list, input) {
     ? `按 ${criteriaText(input, gate)} 推荐 ${list.length} 条 · 走过的已排除 · ${caliber}${gateNote}`
     : `按 ${criteriaText(input, gate)} 没有匹配的线路,放宽预算/天数或难度上限再试`;
   $('rec-list').innerHTML = list.map((r, i) => recCardHtml(r, i, input)).join('');
-  wirePlanButtons($('rec-list'));
+  wirePlanButtons($('rec-list'), 'rec-tier');
   wireMarkButtons($('rec-list'));
   wireTransportLookups($('rec-list'));
   wireTicketSources($('rec-list'));

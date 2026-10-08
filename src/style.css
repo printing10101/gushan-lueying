@@ -189,6 +189,13 @@ header {
 #view-library, #view-archive, #view-recommend { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 20px 16px; gap: 10px; }
 #view-planner[hidden], #view-library[hidden], #view-archive[hidden], #view-recommend[hidden] { display: none; } /* 覆盖 display:flex,否则 hidden 失效 */
 
+/* hidden 必须真的藏住。UA 样式表给的 [hidden]{display:none} 属最低优先级,任何作者层的
+   display 规则都能盖掉它(上面 #view-* 就是这么中招的,所以当年逐条补了覆盖)。
+   逐条补会漏:2026-10-08 实测 #trail-fit 与 #lib-fitness 都设了 display:flex 又带 hidden,
+   于是两个空盒子(有 background/border/padding)一直挂在页面上。这里统一兜住,
+   新增元素不必再记得这件事——js 侧照常用 el.hidden = true/false 控制显隐即可。 */
+[hidden] { display: none !important; }
+
 #view-planner main {
   flex: 1;
   display: grid;

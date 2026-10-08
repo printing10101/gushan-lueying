@@ -146,3 +146,21 @@ test('实测量/GPX 的录入入口必须存在于 app.js', () => {
   assert.ok(!app.includes('在 data/marks.json 该线路下加'),
     '实测量要有界面入口,不能只留一句"去手改 data/marks.json"');
 });
+
+// 预算汇总只允许一条路径。症状与「漏了 switchTrain 的 range」完全一样:平时看着对,
+// 只有点了某个按钮才静默出错,而渲染层在本沙箱跑不起 DOM 冒烟,单测碰不到。
+// 所以用静态断言把它钉住:改 items 的地方必须重新汇总,谁也不许手写汇总字段。
+test('预算汇总只能走 rollupBudget,app.js 不得手写 total/perPerson/unknownCount/range', () => {
+  // 归一化行尾:core.autocrlf=true 下新 clone 检出的是 CRLF,而下面要按 '\n}\n' 取函数体
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
+  const handWritten = [...app.matchAll(/budget\.(total|perPerson|unknownCount|range)\s*=[^=]/g)]
+    .map((m) => m[0].trim());
+  assert.deepEqual(handWritten, [], `汇总字段要由 rollupBudget 统一写,别各处手算:${handWritten.join(', ')}`);
+  assert.ok(app.includes('LIB.budget.budgetRollup('),
+    'rollupBudget 必须调用 lib 里的同一个函数,而不是在渲染层再写一份等价逻辑');
+  // 换车次直接改了 items 里的金额与 band,改完不重新汇总 → 区间停在旧值
+  const at = app.indexOf('async function switchTrain');
+  assert.ok(at > 0, '找不到 switchTrain');
+  const body = app.slice(at, app.indexOf('\n}\n', at));
+  assert.ok(body.includes('rollupBudget('), 'switchTrain 改了票价就必须重算汇总(含区间)');
+});

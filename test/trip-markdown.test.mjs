@@ -76,3 +76,31 @@ test('tripToMarkdown:没有日出日落数据时不写日照行(不编时间)', 
   const { daylightPlan } = require('./lib/gear.js');
   assert.ok(!tripToMarkdown(trip, { daylightOf: daylightPlan }).includes('日照窗口'));
 });
+
+// 住宿档次长在预算数字里,而打印稿的读者点不开控件反查 —— 所以导出必须**总是**写明档次,
+// 与页面表头刻意不同(表头只在非基准档才写,避免噪音)。这条同时钉住旧档名迁移。
+test('tripToMarkdown:导出口径必须写明住宿档次(含旧档名迁移与无字段兜底)', () => {
+  const withTier = (tier) => {
+    const c = { ...trip, input: { ...trip.input } };
+    if (tier === undefined) delete c.input.tier; else c.input.tier = tier;
+    return tripToMarkdown(c, { tierAlias: { 经济: '青旅', 舒适: '客栈' } });
+  };
+  assert.match(withTier('青旅'), /住宿按「青旅档」估算/);
+  assert.match(withTier('酒店'), /住宿按「酒店档」估算/);
+  // 基准档也要写:它是最容易被"省掉"的一档,而省掉就等于不写口径
+  assert.match(withTier('客栈'), /住宿按「客栈档」估算/);
+  assert.match(withTier(undefined), /住宿按「客栈档」估算/, '旧档没有 tier 字段 → 它当时就是按客栈算的');
+  assert.match(withTier('经济'), /住宿按「青旅档」估算/, '旧档名要迁移,不能原样吐出去');
+  // 别把"餐饮"那半句弄丢(改这段时最容易顺手删掉)
+  assert.match(withTier('青旅'), /餐饮按 config 口径估算/);
+});
+
+test('tripToMarkdown:口径行紧跟在预算表后,不落到文档末尾', () => {
+  const md = tripToMarkdown({ ...trip, input: { ...trip.input, tier: '青旅' } });
+  const at = md.indexOf('住宿按「青旅档」估算');
+  const table = md.lastIndexOf('| **合计**');
+  assert.ok(at > table, '口径行要在预算表之后');
+  // 预算表与口径行之间不能隔着别的章节(否则读者在表旁找不到口径)
+  assert.ok(md.slice(table, at).indexOf('## ') === -1,
+    '口径行必须紧跟预算表,中间不能插进新章节');
+});
