@@ -3236,7 +3236,14 @@
     ],
     "supplies": "景区有售卖,门景区食宿",
     "regionId": "jingbei2",
-    "node": "金山岭"
+    "node": "金山岭",
+    "tickets": 65,
+    "ticketNote": "该线路跨两个景区,只能按其中一侧填一个数:金山岭侧全价票 65 元/人(官方票务站;6-18 岁及全日制学生半票,门票不含索道);司马台侧在古北水镇景区内,需买水镇门票才能上长城——水镇成人票 120 元/优待票 70 元,水镇+日游司马台长城联票 80 元起,水镇+长城+往返索道 150 元。两处合计会明显高于 65,出发前请按实际走法核对",
+    "ticketSource": {
+      "source": "金山岭长城景区官方票务站(65 元) / 古北水镇官网票务页(司马台侧)",
+      "url": "https://www.tixclubs.com/ticket.aspx?nav=1&scid=5",
+      "checkedAt": "2026-10-08"
+    }
   },
   "chenjiabao": {
     "name": "陈家堡长城(罗锅城—鸳鸯楼)",
@@ -4972,7 +4979,14 @@
       "高山风大",
       "天气多变"
     ],
-    "supplies": "景区有售卖,坪地乡食宿"
+    "supplies": "景区有售卖,坪地乡食宿",
+    "tickets": 30,
+    "ticketNote": "成人票 30 元(老人票 15 元);无单独观光车票种(见 OTA 页面)。数字来自 OTA 门票页,非官方公示,出发前请核实",
+    "ticketSource": {
+      "source": "去哪儿门票页",
+      "url": "https://touch.piao.qunar.com/touch/detail.htm?id=454193",
+      "checkedAt": "2026-10-08"
+    }
   },
   "chishui-foiguangyan": {
     "name": "佛光岩—五柱峰环线",
@@ -5005,7 +5019,14 @@
       9,
       10
     ],
-    "supplies": "景区有售卖,赤水市食宿"
+    "supplies": "景区有售卖,赤水市食宿",
+    "tickets": 80,
+    "ticketNote": "佛光岩门票 80 元;含往返观光车 105 元;含\"安全服务包\"组合 115 元。若走佛光岩—五柱峰环线,景区观光车基本必坐(105 元那档更接近实付)。数字来自 OTA 门票页,非官方公示,出发前请核实",
+    "ticketSource": {
+      "source": "去哪儿门票页",
+      "url": "https://touch.piao.qunar.com/touch/detail.htm?id=13735",
+      "checkedAt": "2026-10-08"
+    }
   },
   "wanfenglin": {
     "name": "万峰林田园徒步",
