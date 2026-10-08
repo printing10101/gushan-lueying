@@ -541,3 +541,14 @@ test('detourInfo:阈值常量被钉住(改口径要连测试一起改)', () => {
   assert.equal(DETOUR_RATIO, 8);
   assert.equal(DETOUR_MIN_STRAIGHT_KM, 10);
 });
+
+// ---- 门票来源要跟着预算走:行程页的"徒步费用"那条备注必须带出处 ----
+test('hikeBudgetItem:有 ticketSource 时备注带来源与核对日期', () => {
+  const withSrc = hikeBudgetItem({ name: '泰山红门夜爬', tickets: 115,
+    ticketSource: { source: '泰山景区管委会', url: 'https://x', checkedAt: '2026-10-08' } }, 2);
+  assert.equal(withSrc.amount, 230);
+  assert.match(withSrc.note, /泰山景区管委会 2026-10-08 核对/, withSrc.note);
+  // 没来源时不硬编一句"来源未知",保持原文案(老数据不受影响)
+  const plain = hikeBudgetItem({ name: 'x', tickets: 60 }, 1);
+  assert.equal(plain.note, '来自线路库门票字段,观光车/马帮另计');
+});

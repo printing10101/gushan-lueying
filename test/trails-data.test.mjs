@@ -286,3 +286,28 @@ test('jingbei2:三条入门长城已接入,且地理豁免名单没有膨胀', (
     `地理豁免名单应恰为 3 条,现为 ${KEEP_MANUAL.size} 条 —— `
     + '若新增,必须先回答「为什么这条该豁免」,不能因为距离不够就加一条');
 });
+
+// ---- 门票必须"数字与来源配套"(2026-10-08 补数据时立的规矩) ----
+// 由来:门票是参考价、会随季节与政策变,而且同一个景区不同来源会互相矛盾
+// (实测:轿子雪山二手来源写 30 元、攻略写 54 元)。所以:
+//   有 ticketSource ⇒ 必须有一个非负数字,且 url / checkedAt 不能空;
+//   只有 ticketNote 没有数字 ⇒ 合法(那是"查过但不敢填"的记录,正是我们要的诚实状态);
+//   两者都没有 ⇒ 也不违法(老数据就是这样),但会被 label-backlog 列为欠账。
+test('门票字段:ticketSource 必须与数字配套,且来源信息不能空', () => {
+  const bad = [];
+  for (const [id, t] of Object.entries(trails)) {
+    if (t.ticketSource !== undefined) {
+      if (!Number.isFinite(t.tickets) || t.tickets < 0) bad.push(`${id}: 有来源但没有有效门票数字`);
+      if (!t.ticketSource || typeof t.ticketSource !== 'object') bad.push(`${id}: ticketSource 形状不对`);
+      else {
+        if (typeof t.ticketSource.source !== 'string' || !t.ticketSource.source.trim()) bad.push(`${id}: 缺 source`);
+        if (typeof t.ticketSource.checkedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(t.ticketSource.checkedAt)) bad.push(`${id}: checkedAt 必须是 YYYY-MM-DD`);
+        if (t.ticketSource.url !== undefined && !/^https:\/\//.test(String(t.ticketSource.url))) bad.push(`${id}: url 必须是 https`);
+      }
+    }
+    if (t.ticketNote !== undefined && typeof t.ticketNote !== 'string') bad.push(`${id}: ticketNote 必须是字符串`);
+    // 明确允许:有说明但故意不填数字(查过但来源矛盾)
+    if (t.tickets === null && t.ticketNote === undefined) bad.push(`${id}: 留空门票时必须写明为什么(用 ticketNote)`);
+  }
+  assert.deepEqual(bad, [], bad.join('\n   '));
+});

@@ -973,6 +973,7 @@ function renderLibrary() {
   wirePlanButtons($('lib-list'));
   wireMarkButtons($('lib-list'));
   wireTransportLookups($('lib-list'));
+  wireTicketSources($('lib-list'));
 }
 
 // 「用这条线规划行程」按钮:路线库与推荐页共用,点击切到规划页并预选该线路
@@ -1264,6 +1265,16 @@ function oneTimeHtml(t) {
     + `<ul>${items.map((i) => `<li><b>${esc(i.item)}</b><span class="muted">${esc(i.reason)} · ${esc(i.amountNote)}</span></li>`).join('')}</ul></details>`;
 }
 
+// 门票来源的"看原文":走 gushan.openExternal(https 白名单),不在应用内打开
+function wireTicketSources(root) {
+  for (const btn of root.querySelectorAll('[data-ticketsrc]')) {
+    btn.onclick = () => {
+      if (!gushan.openExternal) return; // 预览页没有这个 IPC
+      gushan.openExternal(btn.dataset.ticketsrc).catch((e) => alert(`打开链接失败:${e.message}`));
+    };
+  }
+}
+
 function routeHtml(t) {
   const g = t._grade;
   const statusCls = { 开放: 'st-open', 部分管控: 'st-warn', 管控: 'st-warn', 禁入: 'st-bad', 关闭: 'st-bad' }[t.status];
@@ -1292,6 +1303,9 @@ function routeHtml(t) {
         <span>爬升 ${t.climbM}m</span><span>最高 ${t.maxAltM}m</span>${t.bestSeason ? `<span>${esc(t.bestSeason)}</span>` : ''}</div>
       <p>${esc(t.summary)}</p>
       ${t.statusNote ? `<p class="warn">${esc(t.statusNote)}</p>` : ''}
+      ${t.ticketSource ? `<p class="muted">门票参考来源:${esc(t.ticketSource.source || '')}(${esc(t.ticketSource.checkedAt || '')} 核对)`
+        + (t.ticketSource.url ? ` <button class="mark-btn" data-ticketsrc="${esc(t.ticketSource.url)}">看原文</button>` : '') + '</p>' : ''}
+      ${t.ticketNote ? `<p class="muted">门票口径:${esc(t.ticketNote)}</p>` : ''}
       ${permitNoticeOf(t) ? `<p class="muted">${esc(permitNoticeOf(t))}</p>` : ''}
       ${gradeLine}
       ${fitLineHtml(fit)}
@@ -1457,6 +1471,7 @@ function renderRecommend(list, input) {
   wirePlanButtons($('rec-list'));
   wireMarkButtons($('rec-list'));
   wireTransportLookups($('rec-list'));
+  wireTicketSources($('rec-list'));
 }
 
 function recCardHtml(r, i, input) {

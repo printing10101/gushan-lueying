@@ -344,7 +344,9 @@ app.whenReady().then(async () => {
     const synthTrip = {
       id: 'synthetic', regionName: '合成环线', input: { days: 3, headcount: 2, startDate: '2026-10-20', originStation: 'X', regionId: 'chuanxi' },
       generatedAt: '2026-10-08T00:00:00.000Z', kmNote: '里程、时长与过路费来自腾讯真实驾车路线', routeProvider: 'tencent',
-      trail: { name: '合成线', grade: 2, start: { lng: 103, lat: 30 } },
+      trail: { name: '合成线', grade: 2, start: { lng: 103, lat: 30 }, tickets: 115,
+    ticketNote: '按旺季价计,淡季可能更低',
+    ticketSource: { source: '某景区官网', url: 'https://example.com/tickets', checkedAt: '2026-10-08' } },
       trails: [{ name: '合成线', grade: 2 }],
       railOut: { date: '2026-10-20', chosen: null, presale: true, candidates: [] },
       railBack: { date: '2026-10-22', chosen: null, presale: false, error: 'queryG 返回非 JSON', candidates: [] },
@@ -381,6 +383,21 @@ app.whenReady().then(async () => {
       return { has: !!b, wired: !!(b && typeof b.onclick === 'function'), label: b ? b.textContent : '' };`);
     check('合成行程上出现「导出离线包」按钮', packBtn.has === true, JSON.stringify(packBtn));
     check('「导出离线包」按钮已接线(不是只有标签)', packBtn.wired === true);
+    const tk = await evalIn(`
+      const html = window.routeHtml({ id: 'x', name: '合成线', grade: 2, province: 'X', area: 'Y', type: 'Z',
+        days: 1, distanceKm: 10, climbM: 500, maxAltM: 1500, status: '开放', summary: 's',
+        tickets: 115, ticketNote: '按旺季价计',
+        ticketSource: { source: '某景区官网', url: 'https://example.com/t', checkedAt: '2026-10-08' },
+        _grade: { usable: true, suggested: 2, label: '入门', exertion: 1, altitude: 1, technical: 0 } });
+      const div = document.createElement('div'); div.innerHTML = html;
+      const btn = div.querySelector('[data-ticketsrc]');
+      return { hasSrc: /门票参考来源/.test(div.textContent), noteShown: /门票口径/.test(div.textContent),
+        date: /2026-10-08 核对/.test(div.textContent), btnWired: false,
+        href: btn ? btn.dataset.ticketsrc : null, hasBtn: !!btn };`);
+    check('路线库卡片显示门票参考来源与核对日期', tk.hasSrc === true && tk.date === true, JSON.stringify(tk));
+    check('卡片同时显示门票口径说明(数字不是孤零零一个)', tk.noteShown === true);
+    check('卡片上「看原文」按钮带的是 https 链接',
+      tk.hasBtn === true && String(tk.href).startsWith('https://'), String(tk.href));
     check('去程没票时写明原因(预售期 / 真没车 / 取价失败三者之一)',
       /超出 12306 预售期|没有可购车次|取价失败/.test(tripUi.resultText), tripUi.resultText.slice(0, 160));
 
