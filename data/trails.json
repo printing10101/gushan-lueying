@@ -1934,7 +1934,9 @@
       "source": "去哪儿门票页(感通索道)",
       "url": "https://touch.piao.qunar.com/touch/detail_11027.html",
       "checkedAt": "2026-10-08"
-    }
+    },
+    "regionId": "dianxi",
+    "node": "大理"
   },
   "abuji": {
     "name": "阿布吉措",
@@ -2188,7 +2190,9 @@
       "lat": 25.95
     },
     "summary": "迦叶尊者道场,祝圣寺经华首门到金顶寺,佛教名山里徒步体验最好的一座",
-    "supplies": "寺院与沿线有斋饭食宿,山下宾川补给"
+    "supplies": "寺院与沿线有斋饭食宿,山下宾川补给",
+    "regionId": "dianxi",
+    "node": "宾川"
   },
   "bingzhongluo": {
     "name": "丙中洛茶马古道(雾里村—秋那桶)",
@@ -2286,7 +2290,9 @@
       2,
       3
     ],
-    "supplies": "金鸡峰/牛街周边餐饮民宿完善"
+    "supplies": "金鸡峰/牛街周边餐饮民宿完善",
+    "regionId": "qianxi",
+    "node": "兴义"
   },
   "nianbaoyuze": {
     "name": "年保玉则",
@@ -3073,7 +3079,9 @@
       10,
       11
     ],
-    "supplies": "自备水粮,登封市补给"
+    "supplies": "自备水粮,登封市补给",
+    "regionId": "yuxi",
+    "node": "登封"
   },
   "laojunshan-luoyang": {
     "name": "老君山",
@@ -3118,7 +3126,9 @@
       "source": "老君山景区官网",
       "url": "https://www.laojunshan.cn/",
       "checkedAt": "2026-10-08"
-    }
+    },
+    "regionId": "yuxi",
+    "node": "栾川"
   },
   "guoliang": {
     "name": "郭亮挂壁公路(万仙山)",
@@ -4665,7 +4675,9 @@
       "高空栈道恐高者量力",
       "云雾天湿滑"
     ],
-    "supplies": "山顶有住宿餐饮,山下金沙索道处有镇子"
+    "supplies": "山顶有住宿餐饮,山下金沙索道处有镇子",
+    "regionId": "gandongbei",
+    "node": "玉山"
   },
   "qiyunshan-gan": {
     "name": "齐云山(湘赣界)",
@@ -4733,7 +4745,9 @@
       "公路长距离缓升",
       "保护区管控"
     ],
-    "supplies": "桐木关端补给,自备水粮"
+    "supplies": "桐木关端补给,自备水粮",
+    "regionId": "gandongbei",
+    "node": "铅山"
   },
   "maolan": {
     "name": "茂兰喀斯特森林穿越",
@@ -4838,7 +4852,9 @@
       "2777m 山顶风大",
       "天气多变"
     ],
-    "supplies": "景区有售卖,赫章县食宿"
+    "supplies": "景区有售卖,赫章县食宿",
+    "regionId": "qianxi",
+    "node": "赫章"
   },
   "fanjingshan": {
     "name": "梵净山",
@@ -4876,7 +4892,9 @@
       "红云金顶限流排队",
       "天气瞬变"
     ],
-    "supplies": "山顶有索道与售卖,江口县食宿,需提前预约"
+    "supplies": "山顶有索道与售卖,江口县食宿,需提前预约",
+    "regionId": "qiandongbei",
+    "node": "江口"
   },
   "jiabang-titian": {
     "name": "加榜梯田村寨连穿",
@@ -4994,7 +5012,9 @@
       "source": "去哪儿门票页",
       "url": "https://touch.piao.qunar.com/touch/detail.htm?id=454193",
       "checkedAt": "2026-10-08"
-    }
+    },
+    "regionId": "qianxi",
+    "node": "盘州"
   },
   "chishui-foiguangyan": {
     "name": "佛光岩—五柱峰环线",
@@ -5067,7 +5087,9 @@
       10
     ],
     "tickets": 80,
-    "supplies": "纳灰村农家乐完善,观光车代步"
+    "supplies": "纳灰村农家乐完善,观光车代步",
+    "regionId": "qianxi",
+    "node": "兴义"
   },
   "huizhang-gudao": {
     "name": "徽杭古道",
@@ -5712,7 +5734,9 @@
       "夏季湿热",
       "竹筏另计"
     ],
-    "supplies": "景区售卖完善,武夷山市便利"
+    "supplies": "景区售卖完善,武夷山市便利",
+    "regionId": "gandongbei",
+    "node": "铅山"
   },
   "chuandiding": {
     "name": "船底顶",
@@ -6285,7 +6309,9 @@
       11,
       12
     ],
-    "supplies": "无补给,自给,水满乡备水"
+    "supplies": "无补给,自给,水满乡备水",
+    "regionId": "hainan",
+    "node": "五指山"
   },
   "jianfengling": {
     "name": "尖峰岭",
@@ -6321,7 +6347,9 @@
       "热带雨林湿热",
       "主峰段天气多变"
     ],
-    "supplies": "天池片区食宿,鸣凤谷段自备水粮"
+    "supplies": "天池片区食宿,鸣凤谷段自备水粮",
+    "regionId": "hainan",
+    "node": "乐东"
   },
   "maclehose": {
     "name": "麦理浩径(全程十段)",
