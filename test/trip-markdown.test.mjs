@@ -47,3 +47,32 @@ test('tripToMarkdown:无 seat 时走注入的兜底选座', () => {
   });
   assert.match(md, /硬卧 ¥280\/人/);
 });
+
+// ---- 日照窗口:纯徒步日的收队时间(缺日出日落就不写,不猜时间) ----
+test('tripToMarkdown:徒步日带日照窗口与建议收队时间(由调用方注入计算)', () => {
+  const trip = {
+    regionName: '测试环线', id: 't1', input: { days: 3, headcount: 1, startDate: '2026-10-15', originStation: 'X' },
+    generatedAt: '2026-10-08T00:00:00.000Z',
+    schedule: [{ date: '2026-10-16', type: 'hike', trail: '甲线', info: { name: '甲线', climbM: 500, grade: 2 } }],
+    railOut: { chosen: null }, railBack: { chosen: null },
+    budget: { items: [], total: 0, perPerson: 0 },
+    weather: { node: 'N', forecast: [{ date: '2026-10-16', label: '晴', tempMin: 5, tempMax: 18, precipProb: 10, verdict: '宜', sunrise: '07:12', sunset: '18:40' }] },
+  };
+  // 用真实的 daylightPlan 当注入实现(它自己另有单测)
+  const { daylightPlan } = require('./lib/gear.js');
+  const md = tripToMarkdown(trip, { daylightOf: daylightPlan });
+  assert.match(md, /日照窗口 07:12 → 18:40/, '日出日落要写进导出件: ' + md.slice(0, 200));
+  assert.match(md, /建议 17:40 前收队/, '要给出可执行的收队时间(日落前 1 小时)');
+});
+
+test('tripToMarkdown:没有日出日落数据时不写日照行(不编时间)', () => {
+  const trip = {
+    regionName: 'x', id: 't2', input: { days: 1, headcount: 1, startDate: '2026-10-15', originStation: 'X' },
+    generatedAt: '', schedule: [{ date: '2026-10-15', type: 'hike', trail: '甲线', info: { name: '甲线' } }],
+    railOut: { chosen: null }, railBack: { chosen: null },
+    budget: { items: [], total: 0, perPerson: 0 },
+    weather: { node: 'N', forecast: [{ date: '2026-10-15', label: '晴', tempMin: 5, tempMax: 18, precipProb: 10, verdict: '宜' }] },
+  };
+  const { daylightPlan } = require('./lib/gear.js');
+  assert.ok(!tripToMarkdown(trip, { daylightOf: daylightPlan }).includes('日照窗口'));
+});

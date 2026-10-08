@@ -140,3 +140,29 @@ test('forecastMany:空输入不发请求;坏坐标/非 JSON/缺 daily 各自响�
     globalThis.fetch = realFetch;
   }
 });
+
+// ---- 日出日落:纯徒步日的收队时间要靠它 ----
+test('forecast:解析 sunrise/sunset 为钟点,缺值给 null(不猜时间)', async () => {
+  const realFetch = globalThis.fetch;
+  try {
+    let url = '';
+    globalThis.fetch = async (u) => {
+      url = String(u);
+      return { ok: true, json: async () => ({ elevation: 400, daily: {
+        time: ['2026-10-15', '2026-10-16'], weather_code: [0, 61],
+        temperature_2m_max: [18, 16], temperature_2m_min: [5, 4],
+        precipitation_probability_max: [10, 80], wind_speed_10m_max: [12, 15],
+        sunrise: ['2026-10-15T07:12', '2026-10-16T07:13'], sunset: ['2026-10-15T18:40', null],
+      } }) };
+    };
+    const { forecast } = require('./lib/weather.js');
+    const days = await forecast(103, 30, 2);
+    assert.match(url, /sunrise,sunset/, '请求里要带上这两个字段,否则永远拿不到');
+    assert.equal(days[0].sunrise, '07:12');
+    assert.equal(days[0].sunset, '18:40');
+    assert.equal(days[1].sunset, null, '缺值给 null,不能编一个时间');
+    assert.equal(days[1].sunrise, '07:13');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

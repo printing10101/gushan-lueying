@@ -62,3 +62,38 @@ test('gearChecklist:严寒触发四件套,涉水触发防水,没有天气依据�
 test('gearChecklist:空输入返回空数组', () => {
   assert.deepEqual(gearChecklist(null, {}), []);
 });
+
+// ---- 日照窗口与短日照装备 ----
+test('daylightPlan:算日出日落与建议收队时间(默认日落前 1 小时)', () => {
+  const plan = require('./lib/gear.js').daylightPlan({ sunrise: '07:12', sunset: '18:40' });
+  assert.deepEqual(plan, { sunrise: '07:12', sunset: '18:40', lastLight: '17:40', hours: 11.5 });
+  // 余量可调:收队提前 2 小时
+  assert.equal(require('./lib/gear.js').daylightPlan({ sunrise: '07:00', sunset: '17:00' }, { bufferHours: 2 }).lastLight, '15:00');
+});
+
+test('daylightPlan:缺任一项 / 日落早于日出 / 脏格式 一律 null(不猜时间)', () => {
+  const { daylightPlan } = require('./lib/gear.js');
+  assert.equal(daylightPlan({ sunrise: '07:12' }), null);
+  assert.equal(daylightPlan({ sunset: '18:40' }), null);
+  assert.equal(daylightPlan({}), null);
+  assert.equal(daylightPlan(null), null);
+  assert.equal(daylightPlan({ sunrise: '18:40', sunset: '07:12' }), null, '日落早于日出说明数据反了');
+  assert.equal(daylightPlan({ sunrise: '7:12', sunset: '18:40' }), null, '不补零的格式一律不认,免得算出错时间');
+  assert.equal(daylightPlan({ sunrise: '早上', sunset: '18:40' }), null);
+});
+
+test('gearChecklist:日照 <10 小时推头灯(冬季短线同样需要),且多规则命中不重复列', () => {
+  const { gearChecklist } = require('./lib/gear.js');
+  const single = gearChecklist({ days: 1, summary: '短线', maxAltM: 500 }, { daylightHours: 8.5 });
+  const lamp = single.filter((i) => i.item === '头灯与备用电池');
+  assert.equal(lamp.length, 1);
+  assert.match(lamp[0].reason, /日照仅 8\.5 小时/);
+  // 多日线本来就会推头灯;再加短日照,去重后仍只有一条
+  const multi = gearChecklist({ days: 3, summary: '长线', maxAltM: 500 }, { daylightHours: 8 });
+  assert.equal(multi.filter((i) => i.item === '头灯与备用电池').length, 1);
+  // 日照充足且非多日:不推头灯
+  const sunny = gearChecklist({ days: 1, summary: '短线', maxAltM: 500 }, { daylightHours: 13 });
+  assert.equal(sunny.filter((i) => i.item === '头灯与备用电池').length, 0);
+  // daylightHours 缺失(取不到天气)时不推——不猜
+  assert.equal(gearChecklist({ days: 1, summary: '短线', maxAltM: 500 }, {}).filter((i) => /头灯/.test(i.item)).length, 0);
+});

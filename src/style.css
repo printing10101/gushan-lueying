@@ -394,6 +394,9 @@ button:active { transform: translateY(0) scale(0.98); filter: brightness(0.98); 
 .wx-label { color: var(--ink); }
 .wx-temp { color: var(--ink-dim); }
 .wx-rain { color: var(--ink-faint); }
+
+/* 日出–日落(纯徒步日据此定出发与收队时间):同一格里最次要的信息,压到最小字号 */
+.wx-sun { color: #9db4d0; font-size: 10px; letter-spacing: -0.2px; }
 .wx-v {
   display: inline-block;
   margin-top: 3px;

@@ -18,7 +18,7 @@ const { landBudget: budgetLand, oneTimeCosts: oneTimeOf } = LIB.budget;
 // 地图实现层:高德 / 腾讯 GL 两套 SDK 藏在 lib/map-impl.js 后面,这里不出现任何一家的 API 名
 const { pickMapImpl: pickMapOf, centerOf: mapCenterOf } = LIB.mapImpl;
 const { GRADE_LABELS: GRADE_TEXT } = LIB.grading;
-const { summitTemp: summitTempOf, gearChecklist: gearChecklistOf } = LIB.gear;
+const { summitTemp: summitTempOf, gearChecklist: gearChecklistOf, daylightPlan: daylightPlanOf } = LIB.gear;
 const { quickFacts: quickFactsOf } = LIB.quickfacts;
 const { FIT_LABELS: FIT_TEXT, ADVICE_LABELS: ADVICE_TEXT } = LIB.fitness;
 // 海拔分档口径在 lib/filters.js(与单测同源);名字一律加后缀,避免与 lib 顶层声明撞名
@@ -485,7 +485,9 @@ async function exportTripMd() {
   if (!gushan.exportTrip) { alert('当前环境(预览页)不支持导出'); return; }
   try {
     const res = await gushan.exportTrip(`行程-${currentTrip.id}.md`,
-      LIB.tripMarkdown.tripToMarkdown(currentTrip, { gradeLabels: GRADE_TEXT, seatOf: seatFromPrices }));
+      LIB.tripMarkdown.tripToMarkdown(currentTrip, {
+        gradeLabels: GRADE_TEXT, seatOf: seatFromPrices, daylightOf: daylightPlanOf,
+      }));
     if (!res.canceled) $('left-msg').textContent = `已导出:${res.filePath}`;
   } catch (e) {
     alert(`导出失败:${e.message}`);
@@ -559,6 +561,13 @@ async function renderResult(trip) {
     } else if (day.type === 'hike') {
       const t = day.info || {};
       body = `<p>${esc(t.name || day.trail)}:约${t.climbM}m 爬升 · ★${t.grade} ${esc(t.gradeLabel)} · ${esc(t.supplies || '')}</p><p class="muted">${esc(t.summary || '')}</p>`;
+      // 日照窗口:纯徒步日的出发/收队时间(缺日出日落就不显示,不猜)
+      const wxToday = byDate[day.date] || wxMap.get(day.date); // 当日天气(逐日锚点优先)
+      const dl = daylightPlanOf(wxToday);
+      if (dl) {
+        body += `<p class="muted">日照窗口 ${esc(dl.sunrise)} → ${esc(dl.sunset)}(约 ${dl.hours}h),`
+          + `建议 <b>${esc(dl.lastLight)}</b> 前收队(留 1 小时余量)</p>`;
+      }
       body += summitLineHtml(trip, day.date);
       // 体能匹配按线路 id 查(自动选线的 id 就在 day.info 里),没有匹配结论就不显示
       body += fitLineHtml(bodyState?.matches?.[t.id || trip.input.trailId]);
@@ -662,7 +671,8 @@ function renderWeather(w, note = '') {
       ${beyond ? '<span class="warn">行程后段超出预报窗口,无天气数据</span>' : ''}${note}</div>
     <div class="wx-row">${w.forecast.map((d) => `<div class="wx">
       <div class="wx-date">${esc(d.date.slice(5))}</div><div class="wx-label">${esc(d.label)}</div>
-      <div class="wx-temp">${d.tempMin ?? '—'}~${d.tempMax ?? '—'}℃</div><div class="wx-rain">雨${d.precipProb ?? '—'}%</div>
+      <div class="wx-temp">${d.tempMin ?? '—'}~${d.tempMax ?? '—'}℃</div>
+      ${d.sunrise && d.sunset ? `<div class="wx-sun" title="日出 ${esc(d.sunrise)} / 日落 ${esc(d.sunset)}">${esc(d.sunrise)}–${esc(d.sunset)}</div>` : ''}<div class="wx-rain">雨${d.precipProb ?? '—'}%</div>
       <div class="wx-v v-${esc(d.verdict)}">${esc(d.verdict)}</div></div>`).join('')}</div>`;
 }
 

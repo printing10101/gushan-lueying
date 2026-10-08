@@ -338,6 +338,47 @@ app.whenReady().then(async () => {
         ? !String(hintText).includes('配置比 config.example.json 少项')
         : mentioned.length === expectMissing.length,
       `期望缺 ${expectMissing.join(',')} | 界面命中 ${mentioned.length}/${expectMissing.length} | 实得: ${String(hintText).slice(0, 120)}`);
+    // ---- 渲染一份合成行程:此前"只有真渲染才炸"的路径完全没有覆盖 ----
+    // 实测价值:日照那一行曾引用了作用域里不存在的 wx,单测全绿、现有冒烟全绿,只有真渲染才炸。
+    // 这里造一份结构完整的行程(含驾车/徒步/无票火车/绕行段/装备),断言关键区块都渲染出来。
+    const synthTrip = {
+      id: 'synthetic', regionName: '合成环线', input: { days: 3, headcount: 2, startDate: '2026-10-20', originStation: 'X', regionId: 'chuanxi' },
+      generatedAt: '2026-10-08T00:00:00.000Z', kmNote: '里程、时长与过路费来自腾讯真实驾车路线', routeProvider: 'tencent',
+      trail: { name: '合成线', grade: 2, start: { lng: 103, lat: 30 } },
+      trails: [{ name: '合成线', grade: 2 }],
+      railOut: { date: '2026-10-20', chosen: null, presale: true, candidates: [] },
+      railBack: { date: '2026-10-22', chosen: null, presale: false, error: 'queryG 返回非 JSON', candidates: [] },
+      schedule: [
+        { date: '2026-10-21', type: 'drive', nodes: ['A', 'B'], legs: [
+          { from: 'A', to: 'B', km: 1890, hours: 37.3, costs: { driveTotal: 900, fuel: 800, tolls: 100, tollsEstimated: false },
+            detour: { straightKm: 50, ratio: 38 }, path: '103,30;103.5,30.5' }] },
+        { date: '2026-10-22', type: 'hike', trail: '合成线', node: 'B', info: { name: '合成线', climbM: 700, grade: 2, gradeLabel: '入门', summary: '测试摘要', supplies: '有补给' } },
+      ],
+      gear: [{ item: '头灯与备用电池', reason: '徒步日日照仅 8.5 小时' }],
+      budget: { items: [{ name: '火车去程', amount: 300, note: '占位估算' }], total: 300, perPerson: 150, headcount: 2, unknownCount: 1 },
+      weather: { node: 'B', byDateError: null, forecast: [{ date: '2026-10-22', label: '晴', tempMin: 5, tempMax: 18, precipProb: 10, verdict: '宜', sunrise: '06:28', sunset: '17:20' }],
+        byDate: { '2026-10-22': { date: '2026-10-22', label: '晴', tempMin: 5, tempMax: 18, precipProb: 10, verdict: '宜', sunrise: '06:28', sunset: '17:20', at: 'B' } } },
+    };
+    const tripUi = await evalIn(`
+      return (async () => {
+        const trip = ${JSON.stringify(synthTrip)};
+        let err = null;
+        try { await window.renderResult(trip); } catch (e) { err = String((e && e.message) || e); }
+        const hike = [...document.querySelectorAll('#result .day')].find((d) => d.textContent.includes('徒步'));
+        return { err,
+          hikeText: hike ? hike.textContent.replace(/\s+/g, ' ') : '',
+          strip: (document.getElementById('weather-strip').textContent || '').replace(/\s+/g, ' '),
+          resultText: (document.getElementById('result').textContent || '').replace(/\s+/g, ' ').slice(0, 400) };
+      })();`);
+    check('合成行程渲染不抛错', tripUi && tripUi.err === null, `err: ${tripUi && tripUi.err}`);
+    check('徒步日卡片画出日照窗口与收队时间(缺数据不写)',
+      /日照窗口 06:28 → 17:20/.test(tripUi.hikeText) && /建议 16:20 前收队/.test(tripUi.hikeText),
+      tripUi.hikeText.slice(0, 140));
+    check('天气条每格带日出–日落', /06:28–17:20/.test(tripUi.strip), tripUi.strip.slice(0, 120));
+    check('绕行段给出独立提示', /真实里程是直线距离的 38 倍/.test(tripUi.resultText), tripUi.resultText.slice(0, 160));
+    check('去程没票时写明原因(预售期 / 真没车 / 取价失败三者之一)',
+      /超出 12306 预售期|没有可购车次|取价失败/.test(tripUi.resultText), tripUi.resultText.slice(0, 160));
+
   } catch (e) {
     check('执行 DOM 冒烟脚本', false, e.message);
   }
