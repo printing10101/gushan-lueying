@@ -3828,7 +3828,9 @@
       2,
       12
     ],
-    "supplies": "景区有售卖,和龙市/延吉补给"
+    "supplies": "景区有售卖,和龙市/延吉补给",
+    "regionId": "changbaidong",
+    "node": "和龙"
   },
   "changbaishan-xipo": {
     "name": "长白山西坡天池",
@@ -3865,7 +3867,9 @@
       "山顶天气瞬变风大",
       "夏季紫外线强"
     ],
-    "supplies": "景区有售卖,松江河镇食宿"
+    "supplies": "景区有售卖,松江河镇食宿",
+    "regionId": "changbaidong",
+    "node": "松江河"
   },
   "xuexiang-chuanyue": {
     "name": "雪乡穿越(东升雪谷—双峰雪乡)",
@@ -3897,7 +3901,9 @@
       12
     ],
     "tickets": 115,
-    "supplies": "雪谷/雪乡食宿完善,轻装可行"
+    "supplies": "雪谷/雪乡食宿完善,轻装可行",
+    "regionId": "xuexiang",
+    "node": "亚布力"
   },
   "jingbohu": {
     "name": "镜泊湖火山口地下森林",
@@ -3935,7 +3941,9 @@
       "source": "去哪儿门票页(含页内评论)",
       "url": "https://touch.piao.qunar.com/touch/detail.htm?id=6728",
       "checkedAt": "2026-10-08"
-    }
+    },
+    "regionId": "xuexiang",
+    "node": "宁安"
   },
   "kubuqi": {
     "name": "库布齐沙漠穿越(恩格贝—响沙湾方向)",
@@ -4353,7 +4361,9 @@
       11,
       12
     ],
-    "supplies": "山脚补给,山上自备水粮"
+    "supplies": "山脚补给,山上自备水粮",
+    "regionId": "guibei",
+    "node": "兴安"
   },
   "bamianshan-hunan": {
     "name": "八面山(湖南)",
@@ -4387,7 +4397,9 @@
       "高山草甸风大",
       "天气多变"
     ],
-    "supplies": "山腰八面山村农家,自备部分水粮"
+    "supplies": "山腰八面山村农家,自备部分水粮",
+    "regionId": "ganxi",
+    "node": "崇义"
   },
   "nanfengmian-lingfeng": {
     "name": "南风面—酃峰(罗霄山脉主峰)",
@@ -4418,7 +4430,9 @@
       "山脊线长距离无水源",
       "天气多变"
     ],
-    "supplies": "井冈山端补给,途中无售卖"
+    "supplies": "井冈山端补给,途中无售卖",
+    "regionId": "ganxi",
+    "node": "遂川"
   },
   "hupingshan": {
     "name": "壶瓶山",
@@ -4610,7 +4624,9 @@
       "发云界—金顶长距离",
       "节假日人多"
     ],
-    "supplies": "沿线客栈密布(发云界/金顶),轻装可行"
+    "supplies": "沿线客栈密布(发云界/金顶),轻装可行",
+    "regionId": "ganxi",
+    "node": "芦溪"
   },
   "sanqingshan": {
     "name": "三清山高空栈道环线",
@@ -4680,7 +4696,9 @@
       "罗霄山脊长距离无水源",
       "天气多变"
     ],
-    "supplies": "自备水粮,遂川县端补给"
+    "supplies": "自备水粮,遂川县端补给",
+    "regionId": "ganxi",
+    "node": "崇义"
   },
   "huanggangshan": {
     "name": "黄岗山(华东屋脊)",
@@ -4751,7 +4769,9 @@
       "湿热蛇虫",
       "保护区管控"
     ],
-    "supplies": "茂兰镇食宿,穿越段自备水粮"
+    "supplies": "茂兰镇食宿,穿越段自备水粮",
+    "regionId": "qiandongnan",
+    "node": "荔波"
   },
   "leigongshan": {
     "name": "雷公山",
@@ -4785,7 +4805,9 @@
       "秃杉林湿滑",
       "天气多变"
     ],
-    "supplies": "雷山县补给,山上自备水粮"
+    "supplies": "雷山县补给,山上自备水粮",
+    "regionId": "qiandongnan",
+    "node": "雷山"
   },
   "jiucaiping": {
     "name": "韭菜坪(贵州屋脊)",
@@ -4889,7 +4911,9 @@
       "寨间石板路雨天湿滑",
       "天气多变"
     ],
-    "supplies": "加榜乡民宿食宿完善,轻装可行"
+    "supplies": "加榜乡民宿食宿完善,轻装可行",
+    "regionId": "qiandongnan",
+    "node": "从江"
   },
   "doupengshan": {
     "name": "斗篷山",
@@ -4926,7 +4950,9 @@
       "原始林岔路",
       "望天池段天气多变"
     ],
-    "supplies": "自备水粮,都匀市补给"
+    "supplies": "自备水粮,都匀市补给",
+    "regionId": "qiandongnan",
+    "node": "都匀"
   },
   "wumeng-caoyuan": {
     "name": "乌蒙大草原",
@@ -6079,7 +6105,9 @@
       "华南之巅天气多变",
       "原始林岔路"
     ],
-    "supplies": "山脚有农家,自备部分"
+    "supplies": "山脚有农家,自备部分",
+    "regionId": "guibei",
+    "node": "兴安"
   },
   "shengtangshan": {
     "name": "圣堂山",
@@ -6113,7 +6141,9 @@
       "石峰段攀爬",
       "天气多变"
     ],
-    "supplies": "自备水粮,金秀县食宿"
+    "supplies": "自备水粮,金秀县食宿",
+    "regionId": "guibei",
+    "node": "金秀"
   },
   "yuanbaoshan": {
     "name": "元宝山",
@@ -6148,7 +6178,9 @@
       "原始森林岔路",
       "冷杉区天气多变"
     ],
-    "supplies": "山下苗寨农家,自备部分"
+    "supplies": "山下苗寨农家,自备部分",
+    "regionId": "qiandongnan",
+    "node": "从江"
   },
   "longji-titian": {
     "name": "龙脊梯田徒步(大寨—金坑)",
@@ -6178,7 +6210,9 @@
       10
     ],
     "tickets": 80,
-    "supplies": "大寨/平安寨食宿完善,轻装"
+    "supplies": "大寨/平安寨食宿完善,轻装",
+    "regionId": "guibei",
+    "node": "龙胜"
   },
   "yangdi-xingping": {
     "name": "漓江杨堤—兴坪徒步",
@@ -6214,7 +6248,9 @@
       "沿江路汛期水位上涨",
       "夏季暴晒"
     ],
-    "supplies": "杨堤/兴坪食宿完善,沿途渔村有售卖"
+    "supplies": "杨堤/兴坪食宿完善,沿途渔村有售卖",
+    "regionId": "guibei",
+    "node": "阳朔"
   },
   "wuzhishan": {
     "name": "五指山(一峰—二峰)",
