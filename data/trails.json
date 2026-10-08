@@ -2367,7 +2367,14 @@
       "海拔 4000m 高反",
       "栈道外乱石区易迷路"
     ],
-    "supplies": "景区有售卖,阿坝县食宿"
+    "supplies": "景区有售卖,阿坝县食宿",
+    "tickets": 120,
+    "ticketNote": "门票 120 元/人;观光车(盘羊坪→4520 观景台)15 元/人另计;见\"淡季 60 元\"的说法。数字来自 OTA 景点页与游记,非官方公示,出发前请核实",
+    "ticketSource": {
+      "source": "携程景点页/游记",
+      "url": "https://gs.ctrip.com/html5/you/sight/abacounty1446246/1684361.html",
+      "checkedAt": "2026-10-08"
+    }
   },
   "ani": {
     "name": "阿尼玛卿转山",
@@ -3927,7 +3934,14 @@
       8,
       9
     ],
-    "supplies": "景区有售卖,宁安市食宿"
+    "supplies": "景区有售卖,宁安市食宿",
+    "tickets": 100,
+    "ticketNote": "门票门市约 100 元/人(半价 50),观光车 30 元;OTA 挂牌价为 ¥98 起(含观光车 ¥110 起、含游船套票 ¥160 起、船票 ¥98 起)。数字来自 OTA 门票页与页内评论,非官方公示,出发前请核实;若走火山口地下森林那条,按景区现行票制另计",
+    "ticketSource": {
+      "source": "去哪儿门票页(含页内评论)",
+      "url": "https://touch.piao.qunar.com/touch/detail.htm?id=6728",
+      "checkedAt": "2026-10-08"
+    }
   },
   "kubuqi": {
     "name": "库布齐沙漠穿越(恩格贝—响沙湾方向)",
