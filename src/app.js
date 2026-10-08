@@ -553,7 +553,7 @@ async function renderResult(trip) {
     html.push(`<${warn ? 'p class="warn"' : 'p class="muted"'}>里程口径:${esc(trip.kmNote)}`
       + `${warn ? '。填好 data/config.json 的 amapKeyWeb 或 tencentKeyWeb 后重新生成即为真实驾车路线' : ''}</p>`);
   } else if (trip.distanceEstimated) {
-    html.push('<p class="warn">里程为直线×1.3 估算(未配置路线 Key):里程只保证不低估、'
+    html.push('<p class="warn">里程为直线×1.3 估算(未配置路线 Key):只是量级参考(实测既可能高估也可能低估)、'
       + '过路费按 0.45 元/km 估、地图无真实路线。</p>');
   }
   // 票价为什么是估算的:接口失败 / 未查到车次 / 预售期外,三件事都得说清,别让人以为这条线不通

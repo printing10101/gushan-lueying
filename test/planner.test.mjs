@@ -492,6 +492,12 @@ test('routeNote:三家各说各的,腾讯那档必须点明"过路费仍是估�
   assert.ok(tx.includes('过路费'), '腾讯的过路费来自真实 toll 字段,文案要把它算进去');
   assert.match(routeNote('estimate'), /直线×1.3 估算/);
   assert.ok(routeNote('estimate').includes('未配高德/腾讯 Key'), '两家的 Key 名都要点到,用户才知道该配哪个');
+  // 防回归:这句曾被实测证伪。99 条 leg 跑下来既低估(-15%)也高估(+290%),
+  // 说成"只保证不低估"会让用户以为落差方向只可能是预算偏高——那是方向性误导。
+  // README 早已改成"量级参考",但代码里这句多活了一天,且当时没有任何断言盯着它。
+  assert.doesNotMatch(routeNote('estimate'), /只保证不低估|只保不低估/,
+    '估算既可能高估也可能低估,不许再写成"只保证不低估"');
+  assert.match(routeNote('estimate'), /量级参考/, '必须说清它只是量级参考');
   assert.ok(routeNote('whatever').includes('直线×1.3 估算'), '不认识的来源按最保守的口径说(估的)');
 });
 

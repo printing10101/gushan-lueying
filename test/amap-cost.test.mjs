@@ -108,7 +108,7 @@ test('drivingRoute:同一对节点只查一次高德,反向 leg 独立,失败不
 });
 
 // ---- 未配 Key 的估算口径(与 planner.buildLegs 共用同一个系数) ----
-test('estimatedRoute:里程 = 直线×系数(只保证不低估),过路费交回 calcCosts 估', () => {
+test('estimatedRoute:里程 = 直线×系数(量级参考,不是保守上限),过路费交回 calcCosts 估', () => {
   const A = { lng: 100, lat: 30 };
   const B = { lng: 101.5, lat: 31 };
   const flat = amap.haversineKm(A, B);
