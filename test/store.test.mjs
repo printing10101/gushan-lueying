@@ -1,5 +1,9 @@
 import { createRequire } from 'module';
 const require = createRequire(new URL('../package.json', import.meta.url));
+import { fileURLToPath } from 'url';
+const fs = require('fs');
+const path = require('path');
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const store = require('./lib/store.js');
 const test = require('node:test');
 const assert = require('node:assert');
@@ -94,4 +98,44 @@ test('write:结尾补换行,与 data/*.json 的存盘格式一致', () => {
   } finally {
     store.remove('trips/__store_nl__');
   }
+});
+
+// ---- 打包运行时的数据目录:别把用户数据丢在临时解包目录里 ----
+// 由来:portable exe 每次启动都解包到 %TEMP% 再运行,那里 data/ 只是只读种子;
+// 用户填的 Key、生成的行程会在退出时消失(实测:那个 data/ 里没有 config.json)。
+test('DATA_DIR:开发环境就是仓库里的 data/,不因环境变量缺失而乱跑', () => {
+  assert.equal(store.DATA_DIR, path.join(ROOT, 'data'));
+  assert.equal(store.BUNDLED_DATA_DIR, path.join(ROOT, 'data'));
+});
+
+test('bootstrapDataDir:开发环境不动数据;同一份目录时零副作用', () => {
+  const r = store.bootstrapDataDir();
+  assert.deepEqual(r.copied, [], '开发环境 DATA_DIR === BUNDLED_DATA_DIR,必须什么都不做');
+});
+
+test('bootstrapDataDir:补种子文件、搬 trips、且绝不覆盖已有文件(直接测真实实现)', () => {
+  const tmp = path.join(ROOT, 'test', '__tmp_data__');
+  fs.rmSync(tmp, { recursive: true, force: true });
+  try {
+    fs.mkdirSync(tmp, { recursive: true });
+    // 预置一个"用户已改过"的文件:复制规则必须原样保留它
+    fs.writeFileSync(path.join(tmp, 'regions.json'), '{"mine":true}', 'utf8');
+    const r = store.bootstrapDataDir(tmp);
+    assert.ok(r.copied.includes('trails.json'), '缺的种子要补上: ' + r.copied.join(','));
+    assert.ok(r.copied.includes('seasonality.json'), '季节表也要在(少了它打包版的预算口径不全)');
+    assert.ok(r.copied.includes('config.example.json'));
+    assert.equal(fs.readFileSync(path.join(tmp, 'regions.json'), 'utf8'), '{"mine":true}',
+      '已有文件必须原样保留,不能被种子覆盖');
+    // 幂等:再跑一次不该再做任何复制
+    assert.deepEqual(store.bootstrapDataDir(tmp).copied, [], '第二次调用应无事可做');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('bootstrapDataDir:开发环境(目标就是仓库 data/)零副作用', () => {
+  const before = fs.readdirSync(path.join(ROOT, 'data')).sort().join(',');
+  assert.deepEqual(store.bootstrapDataDir(path.join(ROOT, 'data')).copied, []);
+  assert.equal(fs.readdirSync(path.join(ROOT, 'data')).sort().join(','), before,
+    '不能往真实 data/ 里塞东西');
 });

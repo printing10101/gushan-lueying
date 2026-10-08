@@ -10,6 +10,13 @@ if (process.env.GUSHAN_SOFTWARE_RENDER === '1' || !sessionName || sessionName.st
   app.disableHardwareAcceleration();
 }
 
+// 打包(portable)运行时的数据目录:exe 每次被解到临时目录,那里的 data/ 只是只读快照,
+// 用户填的 Key 与生成的行程会在退出时随临时目录消失。改成放在 exe 所在目录(dist/)持久保存。
+// **必须在 require('../lib/store') 之前注入**:store 在模块加载时就定了 DATA_DIR。
+if (process.env.PORTABLE_EXECUTABLE_DIR && !process.env.GUSHAN_DATA_DIR) {
+  process.env.GUSHAN_DATA_DIR = path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data');
+}
+
 const store = require('../lib/store');
 const { resolveStaticPath } = require('../lib/static-guard');
 const { decideServe } = require('../lib/serve-policy');
@@ -88,6 +95,11 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // 打包首次运行:把随包的种子文件(以及开发机的 config/marks/trips)复制到持久数据目录,再补配置
+  const boot = store.bootstrapDataDir();
+  if (boot.copied.length) {
+    console.log(`[数据目录] ${store.DATA_DIR} 首次初始化,已复制:${boot.copied.join(', ')}`);
+  }
   store.ensureConfig();
   // 来源策略见 lib/serve-policy.js:默认自动(有腾讯地图 Key 且无高德 JS Key 就走本地 http,
   // 因为腾讯 GL 拒绝 file://);GUSHAN_SERVE=0 强制回 file://,=1 强制开。
