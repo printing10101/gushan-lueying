@@ -133,8 +133,9 @@ test('单线区域 qiandongbei 必须保留(梵净山没有别的落脚点)', ()
 
 test('第 3 批没有从已有 23 个区域抢走线路(净增 14 条)', () => {
   const BEFORE = {
-    chuanxi: 16, dianxibei: 10, yili: 5, gannan: 2, qinghaihu: 2, qinling: 6, jinbei: 5,
-    nantaihang: 3, jingxi: 16, huanan: 7, zhennan: 4, zhexi: 3, wannan: 5, sanxia: 5,
+    // qinling 7 / sanxia 6:第 4 批给这两个区域加了节点(华阴/五峰),各 +1,详见 test/regions-batch4.test.mjs
+    chuanxi: 16, dianxibei: 10, yili: 5, gannan: 2, qinghaihu: 2, qinling: 7, jinbei: 5,
+    nantaihang: 3, jingxi: 16, huanan: 7, zhennan: 4, zhexi: 3, wannan: 5, sanxia: 6,
     zangdongnan: 4, yangtzedelta: 2, dianzhong: 2, jingbei2: 3,
     guibei: 5, qiandongnan: 5, ganxi: 4, xuexiang: 2, changbaidong: 2,
   };

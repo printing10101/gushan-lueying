@@ -2573,7 +2573,9 @@
       9,
       10
     ],
-    "supplies": "景区驴车接驳,龙湾村食宿"
+    "supplies": "景区驴车接驳,龙湾村食宿",
+    "regionId": "baiyin",
+    "node": "景泰"
   },
   "aotai": {
     "name": "鳌太线",
@@ -2684,7 +2686,9 @@
       "长空栈道等高空项目必须挂安全绳",
       "冬季结冰湿滑"
     ],
-    "supplies": "沿线有售卖(山上价高),华阴市补给"
+    "supplies": "沿线有售卖(山上价高),华阴市补给",
+    "regionId": "qinling",
+    "node": "华阴"
   },
   "lujiaoliang": {
     "name": "鹿角梁",
@@ -3771,7 +3775,9 @@
       "source": "泰山景区管委会(泰安市政府网)收费项目页",
       "url": "https://tsgw.taian.gov.cn/art/2021/6/8/art_63819_10286536.html",
       "checkedAt": "2026-10-08"
-    }
+    },
+    "regionId": "taishan",
+    "node": "泰安"
   },
   "zhuizishan": {
     "name": "锥子山—小河口长城",
@@ -4022,7 +4028,9 @@
       9,
       10
     ],
-    "supplies": "无水源,全程自给;两端有接待站"
+    "supplies": "无水源,全程自给;两端有接待站",
+    "regionId": "ningxia",
+    "node": "银川"
   },
   "badanjilin": {
     "name": "巴丹吉林沙漠腹地",
@@ -4192,7 +4200,9 @@
       "山脊风大",
       "碎石坡"
     ],
-    "supplies": "无补给,重装自给,提前备水"
+    "supplies": "无补给,重装自给,提前备水",
+    "regionId": "ningxia",
+    "node": "银川"
   },
   "liupanshan": {
     "name": "六盘山",
@@ -4221,7 +4231,9 @@
       8,
       9
     ],
-    "supplies": "景区有售卖,泾源县食宿"
+    "supplies": "景区有售卖,泾源县食宿",
+    "regionId": "ningxia",
+    "node": "固原"
   },
   "shennongjia-laojun": {
     "name": "神农架老君山线",
@@ -4478,7 +4490,9 @@
       "保护区管控",
       "天气多变"
     ],
-    "supplies": "无补给,重装自给,壶瓶山镇备物资"
+    "supplies": "无补给,重装自给,壶瓶山镇备物资",
+    "regionId": "sanxia",
+    "node": "五峰"
   },
   "gaoxiling": {
     "name": "高椅岭",
@@ -5241,7 +5255,9 @@
       "天气多变",
       "山脊风大"
     ],
-    "supplies": "山脚景区有售卖与食宿"
+    "supplies": "山脚景区有售卖与食宿",
+    "regionId": "dabieshan",
+    "node": "霍山"
   },
   "wuyue-gudao": {
     "name": "吴越古道",
@@ -5695,7 +5711,9 @@
       "闽中屋脊天气多变",
       "原始林岔路"
     ],
-    "supplies": "无补给,自给,德化县备水粮"
+    "supplies": "无补给,自给,德化县备水粮",
+    "regionId": "daiyunshan",
+    "node": "德化"
   },
   "wuyishan": {
     "name": "武夷山天游峰环线",

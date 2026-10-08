@@ -141,10 +141,12 @@ test('第 2 批没有从已有 18 个区域抢走线路(净增 18 条)', () => {
   // 建 jingbei2 时的坑:新区域的节点离隔壁区域的线路更近,地理校验全线告红。
   // 本批在建区前逐条算过,零冲突;这条把它钉住——若哪天有人挪了新区域的节点,
   // 已有区域的线路数会掉,这里立刻红。
+  // qinling 6 / sanxia 5 是建区时的值;2026-10-08 第 4 批给这两个区域加了节点
+  // (华阴/五峰,应昱龙授权,见 test/regions-batch4.test.mjs),因此各 +1 —— 这里同步为加节点后的值。
   const ORIGINAL = {
-    chuanxi: 16, dianxibei: 10, yili: 5, gannan: 2, qinghaihu: 2, qinling: 6, jinbei: 5,
+    chuanxi: 16, dianxibei: 10, yili: 5, gannan: 2, qinghaihu: 2, qinling: 7, jinbei: 5,
     nantaihang: 3, jingxi: 16, huanan: 7, zhennan: 4, zhexi: 3, wannan: 5, sanxia: 5,
-    zangdongnan: 4, yangtzedelta: 2, dianzhong: 2, jingbei2: 3,
+    zangdongnan: 4, yangtzedelta: 2, dianzhong: 2, jingbei2: 3, sanxia: 6,
   };
   const NEW_ADDED = { guibei: 5, qiandongnan: 5, ganxi: 4, xuexiang: 2, changbaidong: 2 };
   const count = {};
