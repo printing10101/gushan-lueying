@@ -162,6 +162,101 @@ test('railBudgetItems:无车次与超预售期分开说,金额未知(且没有�
   assert.ok(presale.note.includes('预售期'));
 });
 
+test('railBudgetItems:复核过仍为空时不得断言「没有可购车次」——它与「被限频挡了」无法区分', () => {
+  // 实测事实:同一趟「西安北→北京西 2026-10-20」当时被判成"没有可购车次"、预算退化成
+  // 占位估算,而同一查询另一时刻返回 40 趟车 / 35 趟可购。空响应是二义的,
+  // 所以复核(retried)过仍空只能如实说"未查到 + 请手动复核",不能下"没有车"的判断。
+  const [withRetry] = railBudgetItems({ chosen: null, presale: false, retried: true }, { chosen: null }, 2);
+  assert.match(withRetry.note, /未查到可购车次/, '复核过仍空要说"未查到"');
+  assert.doesNotMatch(withRetry.note, /没有可购车次/, '不得断言"没有可购车次"');
+  assert.match(withRetry.note, /手动复核/, '必须给出可执行的下一步');
+  // 未复核这一支保留原措辞(理论上不该走到,但分支要保持可测)
+  const [noRetry] = railBudgetItems({ chosen: null, presale: false }, { chosen: null }, 2);
+  assert.match(noRetry.note, /没有可购车次/);
+});
+
+// ---------- 12306 空结果的二义性与复核重试 ----------
+// 这两个用例会真等 RAIL_EMPTY_RETRY_MS(1.5 秒),那是实现刻意的等待,不做假。
+const rail = require('./lib/rail12306.js');
+
+const aTrain = (from, to) => ({
+  trainNo: 'D102', code: 'D102', canWebBuy: true, lishi: '12:31',
+  startTime: '02:00', arriveTime: '14:31', seats: { 二等座: '有' },
+  prices: { 二等座: 187 }, from, to,
+});
+
+async function withRailStub(stub, fn) {
+  const realQuery = rail.queryTrains;
+  const realPresale = rail.beyondPresale;
+  rail.queryTrains = stub.query;
+  rail.beyondPresale = stub.beyondPresale;
+  try { return await fn(); } finally {
+    rail.queryTrains = realQuery;
+    rail.beyondPresale = realPresale;
+  }
+}
+
+test('railLeg:首次为空且未超预售期时,必须绕缓存复核一次并采纳复核结果', async () => {
+  const calls = [];
+  const leg = await withRailStub({
+    beyondPresale: () => false,
+    query: async (f, t, _d, opts = {}) => {
+      calls.push(opts.force ? 'force' : 'normal');
+      return opts.force
+        ? { trains: [aTrain(f, t)], stationNames: {} }
+        : { trains: [], stationNames: {}, emptyResult: true };
+    },
+  }, () => railLeg('西安北', '北京西', '2026-10-20'));
+
+  assert.deepEqual(calls, ['normal', 'force'], '拿到空之后必须绕缓存重发一次(不绕缓存会命中刚才的空结果)');
+  assert.ok(leg.chosen, '复核拿到的车次必须被采纳——这正是"误判成没车"要修的那一步');
+  assert.equal(leg.chosen.code, 'D102');
+  assert.equal(leg.evidence.retried, true, 'evidence 要留下"复核过"的痕迹,便于将来诊断');
+  assert.equal(leg.presale, false);
+});
+
+test('railLeg:首次就有车次时不复核(正常路径零额外请求,不打爆个人 Key 的 QPS)', async () => {
+  const calls = [];
+  const leg = await withRailStub({
+    beyondPresale: () => false,
+    query: async (f, t, _d, opts = {}) => {
+      calls.push(opts.force ? 'force' : 'normal');
+      return { trains: [aTrain(f, t)], stationNames: {} };
+    },
+  }, () => railLeg('西安北', '北京西', '2026-10-20'));
+
+  assert.deepEqual(calls, ['normal'], '有车就不该再问一次');
+  assert.equal(leg.evidence.retried, false);
+  assert.ok(leg.chosen);
+});
+
+test('railLeg:超预售期不复核(预售期外必然是空,复核纯属浪费配额)', async () => {
+  const calls = [];
+  const leg = await withRailStub({
+    beyondPresale: () => true,
+    query: async (_f, _t, _d, opts = {}) => {
+      calls.push(opts.force ? 'force' : 'normal');
+      return { trains: [], stationNames: {}, emptyResult: true };
+    },
+  }, () => railLeg('西安北', '北京西', '2026-12-31'));
+
+  assert.deepEqual(calls, ['normal'], '超预售期不该复核');
+  assert.equal(leg.presale, true, '而且必须如实标成"超预售期"');
+  assert.equal(leg.evidence.retried, false);
+});
+
+test('railLeg:复核后仍为空时,标记 retried 供文案改口', async () => {
+  const leg = await withRailStub({
+    beyondPresale: () => false,
+    query: async () => ({ trains: [], stationNames: {}, emptyResult: true }),
+  }, () => railLeg('西安北', '北京西', '2026-10-20'));
+
+  assert.equal(leg.chosen, null);
+  assert.equal(leg.evidence.retried, true);
+  assert.equal(leg.evidence.trainCount, 0);
+  assert.equal(leg.presale, false, '在预售期内,不该标成预售期外');
+});
+
 // ---- 逐日天气锚点 ----
 test('dayAnchors:驾车日锚在当天最后一个节点,徒步日锚在徒步节点,休整/提示日无锚点', () => {
   const schedule = [

@@ -1,5 +1,22 @@
 import { createRequire } from 'module';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 const require = createRequire(new URL('../package.json', import.meta.url));
+
+// 站名表必须在 require 之前指向**测试自带的临时数据根**。
+// 原因:`store.read('stations')` 读的是 data/stations.json,而它是 gitignore 的运行时缓存
+// (官方 station_name.js 下载后落的盘)。开发机上它存在,用例就绿;一旦导出到干净目录
+// (新 clone / CI)它不存在,ensureStations 只能去联网,公网被挡 → 抛"站名表解析为空",
+// 4 条 queryTrains 用例全红。实测过,不是推测。
+// 所以这里自带一份最小站名表,让用例不依赖机器上是否跑过 App。
+const TMP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'gushan-rail-test-'));
+fs.writeFileSync(path.join(TMP_DATA, 'stations.json'), JSON.stringify([
+  { name: '西安北', code: 'ICW' }, // 与下面的 QT_MAP 对应
+  { name: '北京西', code: 'EAY' },
+]));
+process.env.GUSHAN_DATA_DIR = TMP_DATA; // store.js 在模块加载时读它,顺序不能反
+
 const rail = require('./lib/rail12306.js');
 const test = require('node:test');
 const assert = require('node:assert');
@@ -30,6 +47,108 @@ test('parsePrices:空字段与未知代码', () => {
   assert.deepEqual(rail.parsePrices(undefined), {});
   const p = rail.parsePrices('X0123000001');
   assert.deepEqual(p, { 座位代码X: 123 });
+});
+
+test('parsePrices:0 元席别(无价/无票)必须被过滤,否则会被 pickSeat 当成有效价选中', () => {
+  // 这条过滤是"0 不进票价表"的唯一防线:下游 seat.pickSeat 用 Number.isFinite 判有效,
+  // 0 能通过那道门,于是一个 0 元席别会被当成"最便宜的可选座"选出来。
+  // 删掉 price > 0 这个用例就必须红(已做变异验证)。
+  const p = rail.parsePrices('9077400001M040500000O000000000');
+  assert.deepEqual(p, { 商务座: 774, 一等座: 405 }, '0 元的二等座不得进表');
+  assert.ok(!Object.values(p).some((v) => v === 0), '票价表里不允许出现 0 元项');
+});
+
+// ---------- queryTrains 的空结果二义性(网络层 mock) ----------
+// 空车次列表是**二义**响应:可能真的没有匹配车次,也可能是被限频/风控时返回的
+// "结构正确、内容为空"。实测撞到过后一种——同一趟「西安北→北京西 2026-10-20」
+// 被判成"没有可购车次"、预算退化成占位估算,而同一查询另一时刻返回 40 趟车。
+// 所以:空结果要换路径再试、不缓存、并带上 emptyResult 标记交给调用方复核。
+const jsonRes = (body) => new Response(JSON.stringify(body), {
+  status: 200, headers: { 'content-type': 'application/json' },
+});
+
+// 一条最小合法余票行(字段序号对应 ROW,票价编码见上面 parsePrices 的用例)
+function qtRow() {
+  const r = new Array(40).fill('');
+  r[2] = '76000D10200'; r[3] = 'D102';
+  r[6] = 'ICW'; r[7] = 'EAY';
+  r[8] = '02:00'; r[9] = '14:31'; r[10] = '12:31'; r[11] = 'Y';
+  r[30] = '有'; r[39] = 'O018700000';
+  return r.map(String).join('|');
+}
+const QT_MAP = { ICW: '西安北', EAY: '北京西' };
+
+function withFetch(impl) {
+  const real = globalThis.fetch;
+  globalThis.fetch = impl;
+  return () => { globalThis.fetch = real; };
+}
+
+// seen 只统计**余票请求**:cookie 初始化那次不计(它是模块级 cookieJar 的一次性副作用)
+function makeNet(plan) {
+  const seen = [];
+  return {
+    seen,
+    fetch: async (url) => {
+      const u = String(url);
+      if (u.includes('/leftTicket/init')) {
+        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=qt; Path=/' } });
+      }
+      seen.push(u);
+      return plan(seen.length, u);
+    },
+  };
+}
+
+test('queryTrains:空车次列表返回 emptyResult 而不是抛错(空是合法结果,不是故障)', async () => {
+  const net = makeNet(() => jsonRes({ status: true, data: { result: [], map: QT_MAP } }));
+  const restore = withFetch(net.fetch);
+  try {
+    const r = await rail.queryTrains('西安北', '北京西', '2026-03-01', { force: true });
+    assert.equal(r.trains.length, 0);
+    assert.equal(r.emptyResult, true, '空结果必须带标记,否则调用方只能猜它是"没车"');
+    assert.ok(r.emptyHits >= 2, `空结果要换路径再试,不能拿到第一个空就收工(实际 emptyHits=${r.emptyHits})`);
+  } finally { restore(); }
+});
+
+test('queryTrains:某条路径返回非空车次就立刻采纳(空的先换路径)', async () => {
+  const net = makeNet((n) => (n === 1
+    ? jsonRes({ status: true, data: { result: [], map: QT_MAP } })
+    : jsonRes({ status: true, data: { result: [qtRow()], map: QT_MAP } })));
+  const restore = withFetch(net.fetch);
+  try {
+    const r = await rail.queryTrains('西安北', '北京西', '2026-03-02', { force: true });
+    assert.equal(r.trains.length, 1, '第二条路径有车次就必须采纳');
+    assert.equal(r.trains[0].code, 'D102');
+    assert.equal(r.trains[0].prices['二等座'], 187, '票价要一路带出来');
+    assert.equal(r.emptyResult, undefined, '有结果时不该带 emptyResult 标记');
+    assert.equal(net.seen.length, 2, '拿到车次立刻收工,不再打后面的路径(省配额)');
+  } finally { restore(); }
+});
+
+test('queryTrains:空结果不缓存——复核重发必须真的发出请求(否则"被限频"会被固化)', async () => {
+  const net = makeNet(() => jsonRes({ status: true, data: { result: [], map: QT_MAP } }));
+  const restore = withFetch(net.fetch);
+  try {
+    await rail.queryTrains('西安北', '北京西', '2026-03-03');
+    const after1 = net.seen.length;
+    await rail.queryTrains('西安北', '北京西', '2026-03-03'); // 同 key,故意不 force
+    assert.ok(net.seen.length > after1,
+      '同 key 再查必须重新发请求:空结果不许进缓存,否则限频一次会固化 10 分钟');
+  } finally { restore(); }
+});
+
+test('queryTrains:有结果时进缓存;force 可绕过(复核重试靠它)', async () => {
+  const net = makeNet(() => jsonRes({ status: true, data: { result: [qtRow()], map: QT_MAP } }));
+  const restore = withFetch(net.fetch);
+  try {
+    await rail.queryTrains('西安北', '北京西', '2026-03-04');
+    const after1 = net.seen.length;
+    await rail.queryTrains('西安北', '北京西', '2026-03-04');
+    assert.equal(net.seen.length, after1, '第二次应命中缓存,不发请求');
+    await rail.queryTrains('西安北', '北京西', '2026-03-04', { force: true });
+    assert.equal(net.seen.length, after1 + 1, 'force 必须真的重发,否则 planner 的复核是假动作');
+  } finally { restore(); }
 });
 
 function row(overrides = {}) {
