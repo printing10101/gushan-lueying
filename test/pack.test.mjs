@@ -91,3 +91,37 @@ test('packFiles:没有线路/装备/天气时仍产出四个文件,不抛错也�
   assert.ok(!c.includes('## 日照'), '取不到天气就不写日照');
   assert.match(c, /# 行前清单/);
 });
+
+// checklistMarkdown 此前零引用(只通过 packFiles 间接跑到),
+// 而它有几个"数据缺就少写那一段"的分支,不直接钉住就会被 packFiles 的整体断言放过。
+test('checklistMarkdown:缺数据的段落整段不写(不留空壳标题)', () => {
+  const { checklistMarkdown } = require('./lib/pack.js');
+  const bare = { regionName: '测试区', input: { days: 5, startDate: '2026-10-20' } };
+  const md = checklistMarkdown(bare, {});
+  assert.ok(md.includes('# 行前清单'), '标题总要有');
+  assert.ok(!md.includes('## 装备'), '没有装备数据就不出装备段');
+  assert.ok(!md.includes('## 补给'), '没有线路就不出补给段');
+  assert.ok(!md.includes('## 报备'), '没有线路就不出报备段');
+  assert.ok(!md.includes('## 日照'), '算不出日照就不出日照段');
+});
+
+test('checklistMarkdown:有装备时每条带触发原因,可打勾', () => {
+  const { checklistMarkdown } = require('./lib/pack.js');
+  const md = checklistMarkdown({
+    regionName: '测试区', input: { days: 5, startDate: '2026-10-20' },
+    gear: [{ item: '头灯与备用电池', reason: '徒步日日照仅 8.5 小时' }],
+  }, {});
+  assert.ok(md.includes('- [ ] 头灯与备用电池 —— 徒步日日照仅 8.5 小时'), `打勾项要带原因:${md}`);
+  assert.ok(md.includes('## 装备(1 项'), '要报条数');
+});
+
+test('checklistMarkdown:一次性开销只列要不要准备,绝不出金额', () => {
+  const { checklistMarkdown } = require('./lib/pack.js');
+  const md = checklistMarkdown({
+    regionName: '测试区', input: { days: 5, startDate: '2026-01-20' },
+    trail: { name: '雪山线', grade: 4, days: 5, maxAltM: 4500, type: '重装', supplies: '全程无补给' },
+  }, {});
+  assert.ok(md.includes('## 一次性开销'), '该触发的规则要触发');
+  assert.ok(!/¥\s*\d/.test(md), `清单里不允许出现金额:${md}`);
+  assert.ok(/另计|另询/.test(md), '每条都要注明"另计/另询"');
+});

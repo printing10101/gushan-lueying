@@ -58,3 +58,24 @@ test('drivingRoute:estimate 走本地估算(不发请求),未知 provider 报错
   assert.ok(r.distanceKm > 0);
   await assert.rejects(routing.drivingRoute({ lng: 100, lat: 30 }, { lng: 101, lat: 31 }, 'baidu'), /未知的路线 provider/);
 });
+
+// clearCaches 此前零引用 —— 也就是说"缓存清理"这条路径一次都没被执行过。
+// 它牵着两个 provider 各自的 WeakMap(route-cache 按 owner 隔离),漏测等于
+// 不知道清了还是没清。
+test('clearCaches:清完之后同一坐标对会重新发起请求(缓存真的被清掉)', async () => {
+  const { clearCaches } = require('./lib/routing.js');
+  const rc = require('./lib/route-cache.js');
+  let calls = 0;
+  const owner = { tag: 'clearCaches-probe' };
+  const key = rc.routeCacheKey({ lng: 104, lat: 30 }, { lng: 103, lat: 31 });
+  const fetch = () => { calls += 1; return Promise.resolve(`v${calls}`); };
+
+  assert.equal(await rc.cachedRoute(owner, key, fetch), 'v1');
+  assert.equal(await rc.cachedRoute(owner, key, fetch), 'v1', '第二次必须命中缓存');
+  rc.clear(owner);
+  assert.equal(await rc.cachedRoute(owner, key, fetch), 'v2', '清完要重新取');
+
+  // clearCaches 是 routing 的统一入口,不能只清一家
+  assert.equal(typeof clearCaches, 'function');
+  assert.doesNotThrow(() => clearCaches(), '两家都没缓存时也要能安全调用');
+});

@@ -70,3 +70,59 @@ test('pickSeat:0 元会被当成有效票价——"票价表只含有价席别"�
   // 非数值价格一律不算命中(会被优先级循环跳过,最终走兜底分支)
   assert.deepEqual(S.pickSeat({ 硬卧: 'x', 硬座: 128 }, '20:00'), { label: '硬座', price: 128 });
 });
+
+// 挑车口径(pickBuyableTrain):此前 planner.railLeg 与 rail12306 的往返估算各抄了一份,
+// 两边的注释还互相写着"口径与对方一致"——那是漂移的预告。现在只有这一份实现。
+const mkTrain = (code, { lishi, prices, seats, buyable = true } = {}) => ({
+  code, lishi, prices: prices || {}, seats: seats || {}, canWebBuy: buyable,
+});
+
+test('pickBuyableTrain:不可购的车次一律不入选', () => {
+  const out = S.pickBuyableTrain([
+    mkTrain('G1', { lishi: '05:00', prices: { 二等座: 550 }, seats: { 二等座: '有' }, buyable: false }),
+    mkTrain('G2', { lishi: '05:00', prices: { 二等座: 550 }, seats: { 二等座: '有' } }),
+  ]);
+  assert.equal(out.t.code, 'G2', 'canWebBuy=false 的车次不能因为便宜/有票就被选中');
+});
+
+test('pickBuyableTrain:首选坐席有票的优先于无票的(不是只取第一趟)', () => {
+  const out = S.pickBuyableTrain([
+    mkTrain('G1', { lishi: '05:00', prices: { 二等座: 550 }, seats: { 二等座: '无' } }),
+    mkTrain('G2', { lishi: '05:00', prices: { 二等座: 550 }, seats: { 二等座: '有' } }),
+  ]);
+  assert.equal(out.t.code, 'G2', '同样的车,有票的那趟要被挑出来');
+  assert.equal(out.seat.label, '二等座');
+  assert.equal(out.seat.price, 550, '金额逐值断言:只看标签抓不住取价写反');
+});
+
+test('pickBuyableTrain:全部首选坐席都无票时退回第一趟有报价的(不返回 null)', () => {
+  const out = S.pickBuyableTrain([
+    mkTrain('G1', { lishi: '05:00', prices: { 二等座: 550 }, seats: { 二等座: '无' } }),
+  ]);
+  assert.equal(out.t.code, 'G1', '有报价就该给出来,让用户自己决定抢不抢');
+});
+
+test('pickBuyableTrain:夜车按卧铺口径挑(与 seatPreference 同一套历时判据)', () => {
+  const out = S.pickBuyableTrain([
+    mkTrain('K1', { lishi: '20:00', prices: { 硬座: 128, 硬卧: 222 }, seats: { 硬座: '有', 硬卧: '有' } }),
+  ]);
+  assert.equal(out.seat.label, '硬卧');
+  assert.equal(out.seat.price, 222);
+});
+
+test('pickBuyableTrain:没有任何可买/有价的车次返回 null(不编一趟车)', () => {
+  assert.equal(S.pickBuyableTrain([]), null);
+  assert.equal(S.pickBuyableTrain(null), null);
+  assert.equal(S.pickBuyableTrain([mkTrain('G1', { prices: {}, seats: {} })]), null, '无票价 → 选不出座 → null');
+  assert.equal(S.pickBuyableTrain([mkTrain('G1', { prices: { 二等座: 550 }, buyable: false })]), null);
+});
+
+// 这条钉的是"实现只有一份"这件事本身:planner 曾经手抄过 seatOpen/withSeat,
+// 一旦有人再抄回去,单侧改口径就会静默分家——而这类分家平时一律看不出来。
+test('planner 不得再手抄一份选车口径(必须走 seat.pickBuyableTrain)', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(new URL('../lib/planner.js', import.meta.url), 'utf8');
+  assert.ok(!/const seatOpen\s*=/.test(src), 'planner.js 里不该再有 seatOpen 的本地副本');
+  assert.ok(!/const withSeat\s*=/.test(src), 'planner.js 里不该再有 withSeat 的本地副本');
+  assert.ok(src.includes('rail.pickEstimateTrain('), 'planner 必须调用共用的选车函数');
+});

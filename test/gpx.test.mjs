@@ -72,6 +72,20 @@ test('非法坐标的点被跳过,合法点仍成链', () => {
   assert.equal(r.climbM, 200);
 });
 
+test('超长轨迹(20 万点)不崩:最高海拔必须走循环,不能用 Math.max(...spread)', () => {
+  // 为什么钉这条:Math.max(...pts.map(p => p.ele)) 会把每个点压进调用栈,实测 20 万点直接
+  // RangeError。而主进程允许导入 20MB GPX(带高程 trkpt 约 62 字节/点 ≈ 30 万点),
+  // 也就是说崩溃落在**自设的允许范围内**——不是理论边界,是会真撞上的。
+  const N = 200000;
+  const pts = Array.from({ length: N }, (_, i) => [30 + i * 0.0001, 100 + i * 0.0001, 1000 + (i % 50)]);
+  const r = parseGpx(gpx(pts));
+  assert.equal(r.ok, true, '20 万点必须解析成功,不能抛 RangeError');
+  assert.equal(r.points, N);
+  assert.equal(r.maxAltM, 1049, '最高海拔仍要算对(1000 + 最大余数 49)');
+  // 高程按 i%50 锯齿:每 50 点里上升 49 次、回落到 1000 一次 → 4000 个周期 × 49
+  assert.equal(r.climbM, 196000, '爬升同理(锯齿高程的累计上升)');
+});
+
 test('合并判定:小差异 apply,超阈值进 review,无基线也 apply 但标出来', () => {
   assert.equal(GPX_REVIEW_PCT, 10);
   const small = mergeMeasured({ distanceKm: 100 }, { distanceKm: 109 });

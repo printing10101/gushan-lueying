@@ -957,11 +957,14 @@ async function loadLibraryData() {
 
 async function initLibrary() {
   await loadLibraryData();
-  for (const id of ['lib-search', 'lib-province', 'lib-grade', 'lib-type', 'lib-alt', 'lib-status', 'lib-mark', 'lib-sort']) {
+  // 六个 <select> 只绑 change。**不能再叠一个 input**:Chromium 下改 select 会同时派发
+  // input 与 change,两个都绑就等于每次筛选把 191 张卡(每张还要跑 6 个纯函数)重建两遍。
+  // 实测过:这就是"选个省份界面卡一下"的来源。
+  for (const id of ['lib-province', 'lib-grade', 'lib-type', 'lib-alt', 'lib-status', 'lib-mark', 'lib-sort']) {
     $(id).addEventListener('change', renderLibrary);
-    // 搜索框逐键 input 会全量重建整个路线库卡片,防抖后再渲染;其余控件数据量小可即时
-    if (id !== 'lib-search') $(id).addEventListener('input', renderLibrary);
   }
+  // 搜索框相反:只绑 input 防抖(逐键全量重建太贵),**不绑 change**——
+  // 否则键入完一失焦又触发一次全量渲染,防抖白做。
   let searchTimer = null;
   $('lib-search').addEventListener('input', () => {
     clearTimeout(searchTimer);

@@ -6,6 +6,10 @@
   "description": "孤山掠影:自驾×徒步混合行程规划桌面应用(自用)",
   "main": "electron/main.js",
   "productName": "孤山掠影",
+  "engines": {
+    "node": ">=20"
+  },
+  "_dependencyPolicy": "electron / electron-builder 锁死精确版本(打包产物必须可复现);eslint 带 ^(纯工具链,跟随小版本即可)。改动前先读这条。",
   "scripts": {
     "app": "electron .",
     "test": "npm run lint && node --test test/*.test.mjs && npm run smoke:dom",

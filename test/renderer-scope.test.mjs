@@ -164,3 +164,33 @@ test('预算汇总只能走 rollupBudget,app.js 不得手写 total/perPerson/unk
   const body = app.slice(at, app.indexOf('\n}\n', at));
   assert.ok(body.includes('rollupBudget('), 'switchTrain 改了票价就必须重算汇总(含区间)');
 });
+// 路线库筛选控件的监听只能绑一次。为什么必须是静态断言:本沙箱起不了 Electron 窗口,
+// DOM 冒烟跑不动,而这个 bug 的代价是"每次筛选把 191 张卡重建两遍"——
+// Chromium 改 <select> 会同时派发 input 与 change,两个都绑就是两倍工作量。
+test('筛选控件不得同时绑 change 与 input(否则每次筛选渲染两遍)', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
+  const at = app.indexOf('async function initLibrary');
+  assert.ok(at > 0, '找不到 initLibrary');
+  const body = app.slice(at, app.indexOf('\n}\n', at));
+
+  // 1) 全量渲染的直接绑定只许出现在 change 上
+  const directInput = [...body.matchAll(/addEventListener\('input',\s*renderLibrary\)/g)];
+  assert.equal(directInput.length, 0,
+    `input 上直接全量渲染 = 与 change 重复触发:${directInput.length} 处`);
+
+  // 2) 六个 <select> 必须都在 change 的绑定清单里(少一个就是筛选失效),
+  //    且搜索框**不在**这个清单里(它走防抖,进了清单就会双触发)
+  const listMatch = /for \(const id of \[([^\]]*)\]\)/.exec(body);
+  assert.ok(listMatch && body.includes("addEventListener('change', renderLibrary)"), '找不到筛选控件清单');
+  const list = listMatch[1];
+  for (const id of ['lib-province', 'lib-grade', 'lib-type', 'lib-alt', 'lib-status', 'lib-mark', 'lib-sort']) {
+    assert.ok(list.includes(`'${id}'`), `${id} 没接上 change 筛选`);
+  }
+  assert.ok(!list.includes('lib-search'), 'lib-search 不该进 change 全量渲染的循环');
+
+  // 3) 搜索框要防抖(逐键重建 191 张卡太贵),且仍在 input 上生效
+  const searchAt = app.indexOf("addEventListener('input', () => {");
+  assert.ok(searchAt > 0, '搜索框要有防抖入口');
+  const searchBody = app.slice(searchAt, app.indexOf('\n  });', searchAt));
+  assert.ok(/setTimeout\(renderLibrary,\s*\d+\)/.test(searchBody), '搜索框必须防抖后再渲染');
+});

@@ -59,3 +59,18 @@ test('allowTop:给了白名单就只放行那几个顶层目录,data/ 一律拒�
   // 目录穿越在白名单下依然被挡(两道防线叠加,顺序不影响结论)
   assert.equal(resolveStaticPath(ROOT, '/src/../../data/config.json', { allowTop: allow }), null);
 });
+
+// ---- 依赖与版本策略 ----
+// 运行时锁死、工具链带 ^:混着来会让"哪天 electron 悄悄升了级"这种事没人负责。
+test('package.json 声明了 engines,且版本策略有文字说明', () => {
+  const fs = require('fs');
+  const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.ok(pkg.engines && pkg.engines.node, '要声明 node 版本要求(用到 AbortSignal.timeout 等较新 API)');
+  assert.ok(pkg._dependencyPolicy && pkg._dependencyPolicy.length > 20,
+    '要写清"运行时锁死 / 工具链带 ^"的策略,免得下一个人随手改');
+  assert.equal(pkg.devDependencies.electron, pkg.devDependencies.electron.replace(/^[\^~]/, ''),
+    'electron 必须锁死精确版本');
+  assert.equal(pkg.devDependencies['electron-builder'],
+    pkg.devDependencies['electron-builder'].replace(/^[\^~]/, ''),
+    'electron-builder 必须锁死精确版本');
+});

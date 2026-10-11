@@ -282,3 +282,67 @@ test('transferEstimate:查询抛错且整轮没成 → 抛出(不缓存负结果
   const query = async () => { throw new Error('网络'); };
   await assert.rejects(rail.transferEstimate('西安北', '丽江', { lng: 100.2, lat: 26.8 }, query));
 });
+
+// ---- cookie 不是取一次就永远有效 ----
+// 旧写法:jar 非空就跳过初始化 → 应用开一整天后每次查票都带着过期 cookie,
+// 失败还被 planner 吞成"取价失败/占位估算",用户看不出重启就好。
+test('cookie 判新:没取过要取,新鲜的不重取,超 30 分钟必须重取', () => {
+  const { cookieNeedsRefresh, COOKIE_TTL_MS } = rail;
+  const now = 1_700_000_000_000;
+  assert.equal(cookieNeedsRefresh({}, 0, now), true, '空 jar = 从没取过');
+  assert.equal(cookieNeedsRefresh({ JSESSIONID: 'x' }, now, now), false, '刚取的不用重取');
+  assert.equal(cookieNeedsRefresh({ JSESSIONID: 'x' }, now - COOKIE_TTL_MS + 1000, now), false, '差一点还没过期');
+  assert.equal(cookieNeedsRefresh({ JSESSIONID: 'x' }, now - COOKIE_TTL_MS, now), true, '到点就该重取');
+  assert.equal(cookieNeedsRefresh({ JSESSIONID: 'x' }, now - 10 * 60 * 60 * 1000, now), true, '跑了 10 小时必须重取');
+});
+
+test('dropCookies 清空 jar 与取用时间,下一次必然重新初始化', () => {
+  const { cookieNeedsRefresh, dropCookies, COOKIE_TTL_MS } = rail;
+  const now = 1_700_000_000_000;
+  // 先模拟"取过":直接断言 drop 之后的状态是"没取过"
+  dropCookies();
+  assert.equal(cookieNeedsRefresh(undefined, undefined, now), true, 'drop 后必须判定为需要重取');
+  assert.ok(COOKIE_TTL_MS > 0 && COOKIE_TTL_MS <= 60 * 60 * 1000, `TTL 应在合理区间,实得 ${COOKIE_TTL_MS}`);
+});
+
+// ---- 缓存不能只增不减 ----
+// 两个会话级 Map 原先只有 set 没有 delete:过期项要等"再次命中同一 key"才被覆盖,
+// 否则永久驻留。estimateCache 更极端——存的是裸 Promise,压根没有 expires 字段。
+test('sweepExpired:清掉已过期的,留下新鲜的与没有 expires 的', () => {
+  const { sweepExpired } = rail;
+  const now = 1_700_000_000_000;
+  const m = new Map([
+    ['old', { expires: now - 1, result: 1 }],
+    ['fresh', { expires: now + 1000, result: 2 }],
+    ['noExpiry', { result: 3 }],            // 没有 expires 的不该被误删
+    ['badExpires', { expires: NaN, result: 4 }],
+  ]);
+  const out = sweepExpired(m, now);
+  assert.equal(out.has('old'), false, '过期的必须清掉');
+  assert.equal(out.has('fresh'), true, '新鲜的不能动');
+  assert.equal(out.has('noExpiry'), true, '没有 expires 字段的不能误删');
+  assert.equal(out.has('badExpires'), true, 'expires 不是数字的不能误删');
+  assert.equal(out.size, 3);
+});
+
+test('sweepExpired 返回同一个 Map(就地清,不是复制一份)', () => {
+  const { sweepExpired } = rail;
+  const m = new Map([['a', { expires: 0 }]]);
+  assert.equal(sweepExpired(m, Date.now()), m);
+});
+
+test('两个缓存都有 TTL 常量(estimeCache 原先没有)', () => {
+  const { QUERY_TTL_MS, ESTIMATE_TTL_MS } = rail;
+  assert.ok(QUERY_TTL_MS > 0, 'queryTrains 缓存要有 TTL');
+  assert.ok(ESTIMATE_TTL_MS > 0, '往返估算缓存要有 TTL(此前存裸 Promise,永不失效)');
+});
+
+test('cachedEstimate 存的条目带 expires(sweep 才扫得到)', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(new URL('../lib/rail12306.js', import.meta.url), 'utf8');
+  const at = src.indexOf('async function cachedEstimate');
+  assert.ok(at > 0, '找不到 cachedEstimate');
+  const body = src.slice(at, src.indexOf('\n}\n', at));
+  assert.ok(body.includes('expires:'), '估算缓存的条目必须带 expires');
+  assert.ok(body.includes('sweepExpired('), 'cachedEstimate 要顺手清过期项');
+});

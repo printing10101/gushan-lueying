@@ -58,7 +58,11 @@ function startLocalServer() {
       'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
       'cache-control': 'no-store',
     });
-    fs.createReadStream(file).pipe(res);
+    // 读流中途出错(权限/磁盘)时不能让响应悬着:不加这一句,请求会挂到客户端超时,
+    // 页面表现为"地图转圈但没报错"。
+    const stream = fs.createReadStream(file);
+    stream.on('error', () => { res.writeHead(500); res.end('read error'); });
+    stream.pipe(res);
   });
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
 }
@@ -132,7 +136,18 @@ function readData(name) {
 const wrap = (fn) => async (_event, payload) => fn(payload);
 
 ipcMain.handle('data:read', wrap(readData));
-ipcMain.handle('data:write', wrap(({ name, content }) => store.write(name, content)));
+// 渲染层真正要写的只有三类:行程存档(trips/*)与足迹(marks)。实测过调用点就这三处。
+// 其余(config / trails / regions)各走专用通道——trails 的写入在 gpx:import 里,
+// 有「差超阈值一律不写」的纪律与一次性 token 把关;config/regions 压根没有渲染层写入需求。
+// store.resolvePath 只挡得住路径穿越,挡不住"写错/改坏配置文件";这里按用途收口,
+// 让一个被注入的脚本也改不动线路库与 Key 口径。
+const WRITABLE_NAMES = /^(trips\/[A-Za-z0-9_-]+|marks)$/;
+ipcMain.handle('data:write', wrap(({ name, content }) => {
+  if (!WRITABLE_NAMES.test(String(name || ''))) {
+    throw new Error(`不允许写入 ${String(name)}:渲染层只能写 trips/* 与 marks`);
+  }
+  return store.write(name, content);
+}));
 // 行程档案列表:只取概要字段;单个损坏的存档标 error 交给 UI 响亮展示,不拖垮整个列表
 ipcMain.handle('trips:list', () => store.listDir('trips').map((id) => {
   try {
@@ -289,8 +304,13 @@ const GPX_TOKEN_TTL_MS = 5 * 60 * 1000;
 
 function issueGpxToken(payload) {
   const token = `gx${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  pendingGpx.set(token, { ...payload, expires: Date.now() + GPX_TOKEN_TTL_MS });
-  // 顺手清掉过期项:用户中途取消的话 token 不会有人消费
+  const expires = Date.now() + GPX_TOKEN_TTL_MS;
+  pendingGpx.set(token, { ...payload, expires });
+  // 除了"下次签发时顺手清"(用户中途取消的话 token 不会有人消费),再挂一个定时清理:
+  // 导一次 GPX 后就不再操作的话,那条记录会一直留到进程结束。unref() 是必须的——
+  // 否则这个定时器会拖住应用退出。
+  const timer = setTimeout(() => pendingGpx.delete(token), GPX_TOKEN_TTL_MS);
+  if (typeof timer.unref === 'function') timer.unref();
   for (const [k, v] of pendingGpx) if (v.expires < Date.now()) pendingGpx.delete(k);
   return token;
 }
@@ -326,7 +346,14 @@ ipcMain.handle('gpx:import', wrap(async ({ trailId, token, confirmed = false }) 
   const file = filePaths[0];
   const size = fs.statSync(file).size;
   if (size > 20 * 1024 * 1024) throw new Error(`GPX 文件过大(${Math.round(size / 1048576)}MB),不解析`);
-  const measured = gpxLib.parseGpx(fs.readFileSync(file, 'utf8'));
+  // 解析抛错不能把 "Maximum call stack size exceeded" 这类原文甩给用户:
+  // 说清是什么、下一步怎么办(实测超大轨迹会撞这条,见 lib/gpx.js 的注释)。
+  let measured;
+  try {
+    measured = gpxLib.parseGpx(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    return { canceled: false, file, error: `轨迹解析失败(${e.message});文件过大或格式异常,请拆分轨迹后重试` };
+  }
   if (!measured.ok) {
     return { canceled: false, file, error: measured.error, points: measured.points, skipped: measured.skipped };
   }

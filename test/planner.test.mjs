@@ -2,6 +2,7 @@ import { createRequire } from 'module';
 const require = createRequire(new URL('../package.json', import.meta.url));
 const { planDays, pickTrail, addDays, stayBudget, pickCandidates, fuelPlan, buildLegs, noTrailHint, tripIdFor, dayAnchors, forecastsByDate, railBudgetItem, railLeg, pickTrails, fillSpareDays, routeNote, detourInfo, DETOUR_RATIO, DETOUR_MIN_STRAIGHT_KM } = require('./lib/planner.js');
 const rec = require('./lib/recommend.js');
+const P = require('./lib/planner.js'); // 新增导出(如 validateTripInput)走整体引用,免得改一处动一行解构
 const test = require('node:test');
 const assert = require('node:assert');
 
@@ -677,4 +678,62 @@ test('hikeBudgetItem:有 ticketSource 时备注带来源与核对日期', () => 
   // 没来源时不硬编一句"来源未知",保持原文案(老数据不受影响)
   const plain = hikeBudgetItem({ name: 'x', tickets: 60 }, 1);
   assert.equal(plain.note, '来自线路库门票字段,观光车/马帮另计');
+});
+
+// ---- generate 的输入校验 ----
+// UI 已经校验一遍,但 trip:generate 是直接对渲染层开放的 IPC。
+// 不校验的实测后果:addDays('') → "NaN-NaN-NaN";days=NaN 时 `middleDays < 1`
+// 因 NaN 比较恒为 false 不触发,会落盘一份日期/天数错乱的存档并污染档案列表排序。
+test('validateTripInput:合法输入通过', () => {
+  const { validateTripInput } = P;
+  assert.equal(validateTripInput({ startDate: '2026-10-20', days: 7, originStation: '西安北' }), null);
+  assert.equal(validateTripInput({ startDate: '2026-10-20', days: 3, originStation: '西安北' }), null);
+  assert.equal(validateTripInput({ startDate: '2026-10-20', days: 20, originStation: '西安北' }), null);
+});
+
+test('validateTripInput:坏日期一律挡下(空/undefined/非字符串/月份越界)', () => {
+  const { validateTripInput } = P;
+  const bad = ['', undefined, null, '2026-10', '2026-13-01', '2026-10-32', 'not-a-date'];
+  for (const d of bad) {
+    const errs = validateTripInput({ startDate: d, days: 7, originStation: '西安北' });
+    assert.ok(errs && errs.some((e) => e.includes('出发日期非法')),
+      `${JSON.stringify(d)} 应被挡下,实得 ${JSON.stringify(errs)}`);
+  }
+});
+
+test('validateTripInput:天数越界与非整数一律挡下(2 天/21 天/7.5/NaN/字符串数字)', () => {
+  const { validateTripInput } = P;
+  for (const d of [2, 21, 7.5, NaN, undefined, null, 0, -3]) {
+    const errs = validateTripInput({ startDate: '2026-10-20', days: d, originStation: '西安北' });
+    assert.ok(errs && errs.some((e) => e.includes('行程天数非法')),
+      `days=${String(d)} 应被挡下,实得 ${JSON.stringify(errs)}`);
+  }
+  // 字符串数字要认:界面传进来的是表单字符串,不能因为类型就拒
+  assert.equal(validateTripInput({ startDate: '2026-10-20', days: '7', originStation: '西安北' }), null);
+});
+
+test('validateTripInput:出发站为空要挡下', () => {
+  const { validateTripInput } = P;
+  for (const s of ['', '   ', undefined, null]) {
+    const errs = validateTripInput({ startDate: '2026-10-20', days: 7, originStation: s });
+    assert.ok(errs && errs.some((e) => e.includes('出发站为空')), `${JSON.stringify(s)} 应被挡下`);
+  }
+});
+
+test('validateTripInput:多条错误一次全报,不是只报第一条', () => {
+  const { validateTripInput } = P;
+  const errs = validateTripInput({ startDate: '', days: 99, originStation: '' });
+  assert.equal(errs.length, 3, `三条都该列出,实得 ${JSON.stringify(errs)}`);
+});
+
+// 这条钉的是"generate 真的调用了校验"——只测纯函数不够,漏接一样会写脏存档。
+test('generate 入口必须调用 validateTripInput(纯函数有效不等于被接上)', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(new URL('../lib/planner.js', import.meta.url), 'utf8');
+  const at = src.indexOf('async function generate(');
+  assert.ok(at > 0, '找不到 generate');
+  // 取到第一个 '\n}' 为止足够:校验就在函数开头
+  const head = src.slice(at, at + 400);
+  assert.ok(head.includes('validateTripInput('), 'generate 开头必须先校验输入');
+  assert.ok(head.includes('throw new Error'), '校验失败要响亮抛错,不能静默往下走');
 });

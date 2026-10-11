@@ -115,3 +115,16 @@ test('fetchBodyState:TTL 内复用缓存,force 绕过;网络失败也缓存但 f
     globalThis.fetch = realFetch;
   }
 });
+
+// ---- 失败不进长缓存 ----
+// 与 route-cache「失败不缓存」、rail12306 空结果不缓存同纪律:RunOS 没启动是常态,
+// 若把"连不上"缓存 10 分钟,用户启动了 RunOS 也只能在手动刷新之外干等。
+test('cacheTtlFor:连上用长 TTL,连不上只给短 TTL(失败不长期持有)', () => {
+  const { cacheTtlFor, CACHE_TTL_MS, FAIL_TTL_MS } = require('./lib/runos.js');
+  assert.equal(cacheTtlFor({ available: true, dataReady: true }), CACHE_TTL_MS);
+  assert.equal(cacheTtlFor({ available: true, dataReady: false }), CACHE_TTL_MS, '已连接但没数据也算连上了');
+  assert.equal(cacheTtlFor({ available: false }), FAIL_TTL_MS, '未连接不该占用 10 分钟');
+  assert.equal(cacheTtlFor(null), FAIL_TTL_MS);
+  assert.ok(FAIL_TTL_MS < CACHE_TTL_MS / 10, `失败 TTL 必须明显短:${FAIL_TTL_MS} vs ${CACHE_TTL_MS}`);
+  assert.ok(FAIL_TTL_MS >= 1000, `失败 TTL 也要能挡住同一次操作里的重复打接口:${FAIL_TTL_MS}`);
+});
