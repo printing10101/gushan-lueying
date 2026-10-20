@@ -70,6 +70,64 @@ const updates = {
       checkedAt: CHECKED_AT,
     },
   },
+  'langta-c': {
+    status: '禁入',
+    statusNote: '2026-04 和静县、2026-09 昌吉州公告禁止穿越狼塔古道(含昌吉段),违反会被处罚',
+    permit: {
+      prohibited: true,
+      how: '和静县/昌吉州公告禁止穿越狼塔古道',
+      where: '和静县人民政府/昌吉州相关部门',
+      source: '和静县人民政府《关于禁止穿越狼塔古道的公告》',
+      url: 'https://www.xjhj.gov.cn/xjhjx/c110745/202604/cf782cedb7554af2b39773b012d757e3.shtml',
+      checkedAt: CHECKED_AT,
+    },
+  },
+  'langta-v': {
+    status: '禁入',
+    statusNote: '同狼塔C:2026-04/09 和静县、昌吉州公告禁止穿越狼塔古道',
+    permit: {
+      prohibited: true,
+      how: '和静县/昌吉州公告禁止穿越狼塔古道',
+      where: '和静县人民政府/昌吉州相关部门',
+      source: '和静县人民政府《关于禁止穿越狼塔古道的公告》',
+      url: 'https://www.xjhj.gov.cn/xjhjx/c110745/202604/cf782cedb7554af2b39773b012d757e3.shtml',
+      checkedAt: CHECKED_AT,
+    },
+  },
+  'langta-cv': {
+    status: '禁入',
+    statusNote: '同狼塔C:2026-04/09 和静县、昌吉州公告禁止穿越狼塔古道',
+    permit: {
+      prohibited: true,
+      how: '和静县/昌吉州公告禁止穿越狼塔古道',
+      where: '和静县人民政府/昌吉州相关部门',
+      source: '和静县人民政府《关于禁止穿越狼塔古道的公告》',
+      url: 'https://www.xjhj.gov.cn/xjhjx/c110745/202604/cf782cedb7554af2b39773b012d757e3.shtml',
+      checkedAt: CHECKED_AT,
+    },
+  },
+  xixiabangma: {
+    status: '管控',
+    permit: {
+      needed: true,
+      how: '边防证(边境管理区通行证)+希夏邦马保护区入区/管理站手续;2026-05 聂拉木县开始规范管理',
+      where: '聂拉木县/希夏邦马保护区管理站',
+      source: '虎嗅:希夏邦马大环线规范管理报道(2026-05-24)',
+      url: 'https://www.huxiu.com/article/4861087.html',
+      checkedAt: CHECKED_AT,
+    },
+  },
+  kulakangri: {
+    status: '管控',
+    permit: {
+      needed: true,
+      how: '边防证(电子边境管理区通行证)+库拉岗日徒步路线登记',
+      where: '洛扎县/山南边境管理区',
+      source: '洛扎县人民政府:白沙村至库拉岗日徒步路线公告(2025-02-07)',
+      url: 'http://www.luozha.gov.cn/xwzx/tggs/202502/t20250207_147064.html',
+      checkedAt: CHECKED_AT,
+    },
+  },
 };
 
 const trails = JSON.parse(fs.readFileSync(FILE, 'utf8'));

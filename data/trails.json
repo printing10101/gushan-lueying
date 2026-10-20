@@ -61,7 +61,7 @@
     "techLevel": 2,
     "grade": 5,
     "bestSeason": "6-9月",
-    "status": "开放",
+    "status": "禁入",
     "start": {
       "lng": 86.6,
       "lat": 43.7
@@ -78,7 +78,16 @@
       7,
       8,
       9
-    ]
+    ],
+    "statusNote": "2026-04 和静县、2026-09 昌吉州公告禁止穿越狼塔古道(含昌吉段),违反会被处罚",
+    "permit": {
+      "prohibited": true,
+      "how": "和静县/昌吉州公告禁止穿越狼塔古道",
+      "where": "和静县人民政府/昌吉州相关部门",
+      "source": "和静县人民政府《关于禁止穿越狼塔古道的公告》",
+      "url": "https://www.xjhj.gov.cn/xjhjx/c110745/202604/cf782cedb7554af2b39773b012d757e3.shtml",
+      "checkedAt": "2026-10-20"
+    }
   },
   "langta-v": {
     "name": "狼塔V线",
@@ -95,7 +104,7 @@
     "techLevel": 2,
     "grade": 5,
     "bestSeason": "6-9月",
-    "status": "开放",
+    "status": "禁入",
     "start": {
       "lng": 86.3,
       "lat": 42.7
@@ -111,7 +120,16 @@
       7,
       8,
       9
-    ]
+    ],
+    "statusNote": "同狼塔C:2026-04/09 和静县、昌吉州公告禁止穿越狼塔古道",
+    "permit": {
+      "prohibited": true,
+      "how": "和静县/昌吉州公告禁止穿越狼塔古道",
+      "where": "和静县人民政府/昌吉州相关部门",
+      "source": "和静县人民政府《关于禁止穿越狼塔古道的公告》",
+      "url": "https://www.xjhj.gov.cn/xjhjx/c110745/202604/cf782cedb7554af2b39773b012d757e3.shtml",
+      "checkedAt": "2026-10-20"
+    }
   },
   "langta-cv": {
     "name": "狼塔C+V连穿",
@@ -130,7 +148,7 @@
     "techLevel": 2,
     "grade": 5,
     "bestSeason": "6-9月",
-    "status": "开放",
+    "status": "禁入",
     "start": {
       "lng": 86.6,
       "lat": 43.7
@@ -147,7 +165,16 @@
       7,
       8,
       9
-    ]
+    ],
+    "statusNote": "同狼塔C:2026-04/09 和静县、昌吉州公告禁止穿越狼塔古道",
+    "permit": {
+      "prohibited": true,
+      "how": "和静县/昌吉州公告禁止穿越狼塔古道",
+      "where": "和静县人民政府/昌吉州相关部门",
+      "source": "和静县人民政府《关于禁止穿越狼塔古道的公告》",
+      "url": "https://www.xjhj.gov.cn/xjhjx/c110745/202604/cf782cedb7554af2b39773b012d757e3.shtml",
+      "checkedAt": "2026-10-20"
+    }
   },
   "xiate": {
     "name": "夏特古道",
@@ -517,7 +544,15 @@
       9,
       10
     ],
-    "supplies": "无补给,全程重装"
+    "supplies": "无补给,全程重装",
+    "permit": {
+      "needed": true,
+      "how": "边防证(边境管理区通行证)+希夏邦马保护区入区/管理站手续;2026-05 聂拉木县开始规范管理",
+      "where": "聂拉木县/希夏邦马保护区管理站",
+      "source": "虎嗅:希夏邦马大环线规范管理报道(2026-05-24)",
+      "url": "https://www.huxiu.com/article/4861087.html",
+      "checkedAt": "2026-10-20"
+    }
   },
   "kulakangri": {
     "name": "库拉岗日",
@@ -553,7 +588,15 @@
       9,
       10
     ],
-    "supplies": "无补给,全程重装"
+    "supplies": "无补给,全程重装",
+    "permit": {
+      "needed": true,
+      "how": "边防证(电子边境管理区通行证)+库拉岗日徒步路线登记",
+      "where": "洛扎县/山南边境管理区",
+      "source": "洛扎县人民政府:白沙村至库拉岗日徒步路线公告(2025-02-07)",
+      "url": "http://www.luozha.gov.cn/xwzx/tggs/202502/t20250207_147064.html",
+      "checkedAt": "2026-10-20"
+    }
   },
   "taniantaweng": {
     "name": "他念他翁",
