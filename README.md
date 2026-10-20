@@ -441,7 +441,7 @@ wannan 4→5、sanxia 3→5。
 |---|---|
 | `data/config.json` | 路线来源(`routeProvider`,留空=自动)+`amapKeyWeb`/`amapKeyJs`/`amapSecurityJsCode`(高德)+`tencentKeyWeb`(腾讯)、油耗与油种、单日驾车上限、机票跳转出发城市(`flightCityPinyin`)、住宿/餐饮估算口径(`lodging`/`food`)、RunOS 服务地址(`runos.baseUrl`) |
 | `data/regions.json` | 区域库:枢纽(含 `flightCity` 机票跳转目的地拼音)、所属省份与 `stay` 住宿/餐饮区域基准(驱动分省油价与吃住估算)、自驾环线节点(经纬度)、最佳季节、路况提示 |
-| `data/trails.json` | 全国徒步路线库:191 条著名路线按省份编排,含天数/里程/爬升/最高海拔/五星难度评级/通行状态;`scenery` 景色标签(词表见 `lib/recommend.js`,可为空)驱动智能推荐;带 `regionId`+`node` 的条目接入行程规划;`bestMonths` 结构化最佳月份驱动错季提醒与自动选线;`tickets`/`risks`/`supplies` 为自用参考的门票/风险/补给信息(见标注口径);`coordinateNote` 记录坐标修正的来源与依据(改过坐标的条目才有);`sourceNote` 记录里程/爬升/门票等数值的公开资料来源与估算部分(本轮新增的线路才有) |
+| `data/trails.json` | 全国徒步路线库:191 条著名路线按省份编排,含天数/里程/爬升/最高海拔/五星难度评级/通行状态;`scenery` 景色标签(词表见 `lib/recommend.js`,可为空)驱动智能推荐;带 `regionId`+`node` 的条目接入行程规划;`bestMonths` 结构化最佳月份驱动错季提醒与自动选线;`tickets`/`risks`/`supplies` 为自用参考的门票/风险/补给信息(见标注口径);`permit` 记录受限线路的报备要求或官方禁止通告(`prohibited`),没有出处时界面显示「未核实」;`riskNotes` 是 `risks` 的平行出处字段;`coordinateNote` 记录坐标修正的来源与依据(改过坐标的条目才有);`sourceNote` 记录里程/爬升/门票等数值的公开资料来源与估算部分(本轮新增的线路才有) |
 | `data/stations.json` | 12306 站名↔电报码缓存(自动生成) |
 | `data/seasonality.json` | 季节系数表:全国月份淡旺、法定节假日(2026 已公布安排,每条带 `source` 注明核对状态)、区域专属旺季。乘在区域基准/config 口径上,取命中项最大值 |
 | `data/oilprice.json` | 当日分省油价缓存(自动生成,一天最多打一次站点) |
