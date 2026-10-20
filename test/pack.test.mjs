@@ -125,3 +125,17 @@ test('checklistMarkdown:一次性开销只列要不要准备,绝不出金额', (
   assert.ok(!/¥\s*\d/.test(md), `清单里不允许出现金额:${md}`);
   assert.ok(/另计|另询/.test(md), '每条都要注明"另计/另询"');
 });
+
+test('checklistMarkdown:多线串联时每条线的补给/风险/报备都要写出来', () => {
+  const { checklistMarkdown } = require('./lib/pack.js');
+  const a = { name: '甲线', grade: 2, supplies: '甲线有补给', risks: ['甲风险'] };
+  const b = { name: '乙线', grade: 3, status: '管控', supplies: '乙线无补给', risks: ['乙风险'],
+    permit: { needed: true, how: '乙材料', where: '乙受理点', leadDays: 2 } };
+  const md = checklistMarkdown({
+    regionName: '测试区', input: { days: 5, startDate: '2026-10-20' },
+    trail: a, trails: [a, b],
+  }, {});
+  for (const text of ['甲线有补给', '甲风险', '乙线无补给', '乙风险', '乙材料', '乙受理点']) {
+    assert.ok(md.includes(text), `多线清单漏了「${text}」:${md}`);
+  }
+});

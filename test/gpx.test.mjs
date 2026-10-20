@@ -156,6 +156,20 @@ test('tripToGpx:有高德 polyline 时逐点写出,并声明来源是真实路�
   assert.ok(out.trimEnd().endsWith('</gpx>'), '文档必须闭合');
 });
 
+test('tripToGpx:腾讯路线不能冒充高德;多线要把每条线的起点都写出来', () => {
+  const path = '116.404,39.911;115.575,40.014';
+  const a = { name: '甲线', grade: 2, days: 1, start: { lng: 116.2, lat: 39.95 } };
+  const b = { name: '乙线', grade: 3, days: 2, start: { lng: 115.8, lat: 40.1 } };
+  const out = tripToGpx(mkTrip([{ from: '北京', to: '斋堂', km: 81, path }], {
+    routeProvider: 'tencent', trail: a, trails: [a, b],
+  }), gpxRegion);
+  assert.match(out, /腾讯真实路线/, '来源必须与 routeProvider 一致');
+  assert.ok(!out.includes('驾车轨迹来自高德真实路线'), '腾讯路线不能写高德');
+  assert.equal((out.match(/<wpt /g) || []).length, 2, '多线应写全部徒步起点');
+  assert.ok(out.includes('徒步起点 甲线') && out.includes('徒步起点 乙线'), out.slice(0, 500));
+  assert.equal(parseGpx(out).ok, true, '多线 GPX 也必须能被自家解析器读回');
+});
+
 test('tripToGpx:没 polyline 时用节点直线骨架,并把"不是真实路线"写进 metadata', () => {
   const out = tripToGpx(mkTrip([{ from: '北京', to: '斋堂', km: 81, path: '', estimated: true }],
     { distanceEstimated: true }), gpxRegion);
@@ -164,7 +178,7 @@ test('tripToGpx:没 polyline 时用节点直线骨架,并把"不是真实路线"
   // 所以这里必须逐值断言,只数点数会放过这类缺陷
   assert.ok(out.includes('lat="39.911" lon="116.404"'), 'from 端取 loop 节点的 lat/lng');
   assert.ok(out.includes('lat="40.014" lon="115.575"'), 'to 端不能把 lon 写成 lat');
-  assert.match(out, /未配高德 Key,全部为节点直线骨架\(仅作方向参考,不能当路书用\)/);
+  assert.match(out, /未配路线 Key,全部为节点直线骨架\(仅作方向参考,不能当路书用\)/);
   assert.match(out, /里程为直线×1\.3 估算/, '当天有估算里程就得在 trk 的 desc 里说');
 });
 

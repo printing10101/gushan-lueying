@@ -94,11 +94,23 @@ test('景色为主:命中标签越多得分越高,hits 只列命中的', () => {
 });
 
 test('预算为辅:同景色命中时预算内排在超预算前,超预算金额如实标出', () => {
-  const cheap = scoreTrail(trail({ days: 2, scenery: ['雪山'] }), { scenery: ['雪山'], budget: 1000 }, {});
-  const dear = scoreTrail(trail({ days: 7, scenery: ['雪山'] }), { scenery: ['雪山'], budget: 1000 }, {});
+  // 这里要测"预算分"本身,所以给两条线都标上已知门票(0 元);
+  // 门票未知时预算分按设计退回中立,不能拿来比较余裕。
+  const cheap = scoreTrail(trail({ days: 2, tickets: 0, scenery: ['雪山'] }), { scenery: ['雪山'], budget: 1000 }, {});
+  const dear = scoreTrail(trail({ days: 7, tickets: 0, scenery: ['雪山'] }), { scenery: ['雪山'], budget: 1000 }, {});
   assert.ok(cheap.est < 1000 && dear.est > 1000);
   assert.ok(cheap.score > dear.score);
   assert.equal(dear.overBudget, dear.est - 1000);
+});
+
+test('门票未知不能当成 0 去赢预算分:unknownCount 要带出来,预算分退回中立', () => {
+  const want = { scenery: ['雪山'], budget: 500 };
+  const unknown = scoreTrail(trail({ days: 2, tickets: null, scenery: ['雪山'] }), want, CFG);
+  const knownCheap = scoreTrail(trail({ days: 2, tickets: 80, scenery: ['雪山'] }), want, CFG);
+  assert.equal(unknown.unknownCount, 1);
+  assert.ok(knownCheap.est > unknown.est, '未标门票的已知合计当然更小');
+  assert.ok(unknown.score <= knownCheap.score,
+    `未知项不能因为"没算进去"而得到更高预算分:unknown=${unknown.score} known=${knownCheap.score}`);
 });
 
 test('没填预算给中立分;没选景色时按花费兜底排序且剔除禁入', () => {

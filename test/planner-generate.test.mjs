@@ -58,14 +58,14 @@ const dayForecast = (i) => ({
 // ---------- 打桩 ----------
 let written = [];
 let archive = new Map(); // trips/<id> → 内容,让 tripIdFor 的 lookup 能真的读回上一版
-function installStubs({ trains = [TRAIN], trail = TRAIL, days = 5 } = {}) {
+function installStubs({ trains = [TRAIN], trail = TRAIL, days = 5, config = CONFIG, region = REGION, trailMap = null } = {}) {
   written = [];
   archive = new Map();
-  const trails = { t1: { ...trail } };
+  const trails = trailMap || { t1: { ...trail } };
   store.read = (name) => {
     if (name.startsWith('trips/')) return archive.get(name) || null;
-    if (name === 'config') return { ...CONFIG };
-    if (name === 'regions') return { testregion: REGION };
+    if (name === 'config') return { ...config };
+    if (name === 'regions') return { testregion: region };
     if (name === 'trails') return trails;
     if (name === 'seasonality') return {};
     return null;
@@ -121,6 +121,33 @@ test('generate:不碰网络也能排出一份完整行程(驾车日 + 徒步日 
   assert.ok(trip.savedTo.includes('data/trips/'), `savedTo:${trip.savedTo}`);
 });
 
+test('generate:多线装备按各自节点天气推导,不拿第一条线的预报代替全部', async () => {
+  const region = {
+    name: '双节点测试环线', province: '四川', hub: { railStation: '成都东', city: '成都' },
+    loop: [
+      { name: '成都', lng: 104.07, lat: 30.66 },
+      { name: '甲节点', lng: 103.9, lat: 31.0 },
+      { name: '乙节点', lng: 103.7, lat: 31.2 },
+      { name: '成都', lng: 104.07, lat: 30.66 },
+    ],
+    stay: { perRoomPerNight: 200, perPersonPerDay: 80 },
+  };
+  const a = { ...TRAIL, id: 'a', name: '甲线', node: '甲节点', days: 1, maxAltM: 4500 };
+  const b = { ...TRAIL, id: 'b', name: '乙线', node: '乙节点', days: 1, maxAltM: 3000 };
+  installStubs({ region, trailMap: { a, b } });
+  // 第一条线所在节点降水 10%,第二条线所在节点降水 80%。
+  // 旧实现用 weatherNode(第一条线)的单点预报推导所有线,雨具这一条会消失。
+  weather.forecast = async () => Array.from({ length: 16 }, (_, i) => ({ ...dayForecast(i), precipProb: 10 }));
+  weather.forecastMany = async (pts) => pts.map((p) => ({
+    ...p,
+    forecast: Array.from({ length: 16 }, (_, i) => ({ ...dayForecast(i), precipProb: p.name === '乙节点' ? 80 : 10 })),
+  }));
+  const trip = await planner.generate({ ...baseInput(), regionId: 'testregion', trailIds: ['a', 'b'], days: 6, headcount: 1 });
+  const rain = trip.gear.find((i) => i.item.includes('雨具'));
+  assert.ok(rain, `第二条线 80% 降水应推出雨具:${JSON.stringify(trip.gear)}`);
+  assert.match(rain.reason, /80%/, `雨具原因必须引用第二条线自己的降水:${rain.reason}`);
+});
+
 test('generate:里程口径是估算时,页面与导出都要能说清(routeProvider=estimate)', async () => {
   installStubs();
   const trip = await planner.generate(baseInput());
@@ -166,6 +193,28 @@ test('generate:门票未标注时计为未知,不按 0 混进合计', async () =
   assert.match(ticket.note, /未标注/, `备注要说清:${ticket.note}`);
   assert.ok(trip.budget.unknownCount >= 1, 'unknownCount 要把它数进去');
   assert.ok(Number.isFinite(trip.budget.total), '合计仍要是有限数,不能变 NaN');
+});
+
+test('generate:同条件重生成会复用存档 id,但必须保留旧档的 actualCost', async () => {
+  installStubs();
+  const first = await planner.generate(baseInput());
+  const key = `trips/${first.id}`;
+  archive.set(key, { ...archive.get(key), actualCost: 321 });
+  const second = await planner.generate(baseInput());
+  assert.equal(second.id, first.id, '同条件重生成应复用同一个存档 id');
+  assert.equal(archive.get(key).actualCost, 321, '重生成不能把已经记下的实际花费抹掉');
+});
+
+test('generate:headcount=Infinity 必须在入口被挡下,不写 NaN/Infinity 存档', async () => {
+  installStubs();
+  await assert.rejects(() => planner.generate(baseInput({ headcount: Infinity })), /出行人数非法/);
+  assert.equal(written.length, 0, '非法人数不能写盘');
+});
+
+test('generate:油费配置缺失时在出门查询前报错,不写 ¥NaN 预算', async () => {
+  installStubs({ config: { ...CONFIG, fuel: { consumptionLPer100km: 8 } } });
+  await assert.rejects(() => planner.generate(baseInput()), /油费配置不完整/);
+  assert.equal(written.length, 0, '油费配置坏时不能写盘');
 });
 
 test('generate:火车查不到车次时预算不留空洞(给占位估算并说明)', async () => {

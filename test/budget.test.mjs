@@ -65,6 +65,15 @@ test('日期留空 / 非法 → 中性基准并明说,不静默用 1.0', () => {
   assert.equal(B.seasonFactors('2026-10-01', null, SEASON).lodging, 1.8);
 });
 
+test('validDate:日历上不存在的日子不能靠"1-31"蒙混过关', () => {
+  for (const d of ['2026-02-29', '2026-02-31', '2026-04-31', '2026-06-31', '2026-09-31', '2026-11-31']) {
+    assert.equal(B.validDate(d), null, `${d} 不存在,必须是 null`);
+  }
+  for (const d of ['2026-01-31', '2026-02-28', '2026-12-31', '2028-02-29']) {
+    assert.equal(B.validDate(d), d, `${d} 合法,应原样返回`);
+  }
+});
+
 test('节假日日历没覆盖的年份降级到月份,并说明', () => {
   const s = B.seasonFactors('2028-04-05', null, SEASON);
   assert.equal(s.lodging, 1);

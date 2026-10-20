@@ -34,7 +34,8 @@ for (const d of trip.schedule) {
   const brief = d.type === 'drive'
     ? d.legs.map((l) => `${l.from}→${l.to} ${l.km}km/${l.hours}h`).join(' + ')
     : d.type === 'hike' ? `${d.info?.name || d.trail}${d.seasonWarn ? ` ⚠${d.seasonWarn}` : ''}`
-    : d.text;
+      : d.type === 'rest' ? (d.spare ? '机动/备用日' : '休整')
+        : d.text;
   console.log(`${d.date} [${d.type}] ${brief}`);
 }
 console.log(`去程:${trip.railOut.chosen ? `${trip.railOut.chosen.code} ${trip.railOut.chosen.startTime}` : '无可购车次'}`);

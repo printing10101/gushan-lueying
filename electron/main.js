@@ -19,6 +19,7 @@ if (process.env.PORTABLE_EXECUTABLE_DIR && !process.env.GUSHAN_DATA_DIR) {
 
 const store = require('../lib/store');
 const { resolveStaticPath } = require('../lib/static-guard');
+const { endReadError } = require('../lib/stream-error');
 const { decideServe } = require('../lib/serve-policy');
 const rail = require('../lib/rail12306');
 const weather = require('../lib/weather');
@@ -58,13 +59,19 @@ function startLocalServer() {
       'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
       'cache-control': 'no-store',
     });
-    // 读流中途出错(权限/磁盘)时不能让响应悬着:不加这一句,请求会挂到客户端超时,
-    // 页面表现为"地图转圈但没报错"。
+    // 读流中途出错(权限/磁盘)时不能让响应悬着;但响应头已经发出,不能二次 writeHead。
     const stream = fs.createReadStream(file);
-    stream.on('error', () => { res.writeHead(500); res.end('read error'); });
+    stream.on('error', (err) => endReadError(res, err));
     stream.pipe(res);
   });
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
+  return new Promise((resolve, reject) => {
+    const onError = (e) => reject(e);
+    server.once('error', onError);
+    server.listen(0, '127.0.0.1', () => {
+      server.removeListener('error', onError);
+      resolve(server);
+    });
+  });
 }
 
 let serveOrigin = null; // 非空 = 走本地 http 来源(仅 GUSHAN_SERVE=1 时)
@@ -99,26 +106,63 @@ function createWindow() {
   else win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
 }
 
-app.whenReady().then(async () => {
-  // 打包首次运行:把随包的种子文件(以及开发机的 config/marks/trips)复制到持久数据目录,再补配置
-  const boot = store.bootstrapDataDir();
-  if (boot.copied.length) {
-    console.log(`[数据目录] ${store.DATA_DIR} 首次初始化,已复制:${boot.copied.join(', ')}`);
-  }
-  store.ensureConfig();
-  // 来源策略见 lib/serve-policy.js:默认自动(有腾讯地图 Key 且无高德 JS Key 就走本地 http,
-  // 因为腾讯 GL 拒绝 file://);GUSHAN_SERVE=0 强制回 file://,=1 强制开。
-  const policy = decideServe({ env: process.env, cfg: store.read('config') || {} });
-  console.log(`[来源策略] ${policy.mode} —— ${policy.reason}`);
-  if (policy.serve) {
-    const server = await startLocalServer();
-    const { port } = server.address();
-    serveOrigin = `http://127.0.0.1:${port}`;
-    console.log(`[本地服务] ${serveOrigin}(只放行 src/ 与 lib/,data/ 不出网口)`);
-  }
-  createWindow();
-});
+const gotSingleInstanceLock = process.env.GUSHAN_SINGLE_INSTANCE === '0'
+  ? true
+  : app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  // 两个实例同时写 marks/trips 会互相覆盖;第二个实例直接退出,把已有窗口叫到前面。
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+
+  app.whenReady().then(async () => {
+    // 打包首次运行:把随包的种子文件复制到持久数据目录,再补配置。
+    // 用户的 config/marks/trips 不随包(见 build.files 的排除项),需要时手动复制。
+    const boot = store.bootstrapDataDir();
+    if (boot.copied.length) {
+      console.log(`[数据目录] ${store.DATA_DIR} 首次初始化,已复制:${boot.copied.join(', ')}`);
+    }
+    store.ensureConfig();
+    // 来源策略见 lib/serve-policy.js:默认自动(有腾讯地图 Key 且无高德 JS Key 就走本地 http,
+    // 因为腾讯 GL 拒绝 file://);GUSHAN_SERVE=0 强制回 file://,=1 强制开。
+    const policy = decideServe({ env: process.env, cfg: store.read('config') || {} });
+    console.log(`[来源策略] ${policy.mode} —— ${policy.reason}`);
+    if (policy.serve) {
+      const server = await startLocalServer();
+      const { port } = server.address();
+      serveOrigin = `http://127.0.0.1:${port}`;
+      console.log(`[本地服务] ${serveOrigin}(只放行 src/ 与 lib/,data/ 不出网口)`);
+    }
+    createWindow();
+  }).catch((e) => {
+    // 数据目录不可写/本地端口起不来时,不要留一个没有窗口的黑进程。
+    console.error('启动失败:', e);
+    dialog.showErrorBox('孤山掠影启动失败', String(e?.message || e));
+    app.quit();
+  });
+}
 app.on('window-all-closed', () => app.quit());
+
+// 渲染层只需要地图 JS Key 与估算口径,不需要 Web 服务 Key、RunOS 地址等主进程专用配置。
+// 尤其 amapKeyWeb/tencentKeyWeb 可用来消耗配额,没必要交给可被 HTML 注入的渲染进程。
+function rendererConfig(data) {
+  if (!data) return data;
+  const out = {};
+  const keys = ['amapKeyJs', 'amapSecurityJsCode', 'flightCityPinyin', 'lodging', 'food'];
+  for (const k of keys) if (data[k] !== undefined) out[k] = data[k];
+  // 腾讯的一把 Key 可同时用于 WebService 与 JS GL;若用户只填了 tencentKeyWeb,
+  // 渲染层仍需要一个 JS Key 名称来加载地图(不能因此把整份 config 交出去)。
+  const tencentJs = data.tencentKeyJs || data.tencentKeyWeb;
+  if (tencentJs !== undefined) out.tencentKeyJs = tencentJs;
+  if (Array.isArray(data._gaps)) out._gaps = data._gaps;
+  return out;
+}
 
 // 线路库附上评级明细(_grade = 派生字段,勿手改),渲染进程拿去展示与筛选
 function readData(name) {
@@ -129,7 +173,10 @@ function readData(name) {
   // config:把"example 有而 config 没有"的键位随读返回,由界面提示(派生字段,不写盘)
   // 为什么只报不补:ensureConfig 只在文件不存在时拷,此后 example 新增的键不会进已有 config,
   // 缺 flightCityPinyin 时「查机票」是点了必报错的那种(代码里没有默认值)。补谁的配置由用户自己定。
-  if (name === 'config' && data) data._gaps = store.configGaps();
+  if (name === 'config' && data) {
+    data._gaps = store.configGaps();
+    return rendererConfig(data);
+  }
   return data;
 }
 
@@ -247,6 +294,9 @@ ipcMain.handle('rail:query', wrap(({ fromStation, toStation, date }) =>
 ipcMain.handle('rail:resolveStation', wrap((keyword) => rail.resolveStation(keyword)));
 // amap 只在主进程 planner 内部使用,不暴露渲染层 IPC(驾车路线由行程生成时一并取回)
 ipcMain.handle('weather:forecast', wrap(({ lng, lat, days }) => weather.forecast(lng, lat, days)));
+// 旧档刷新天气:一次取回所有锚点的逐日预报(与 planner.generate 的富化同一实现),
+// 否则只刷新单点会把 byDate 里的旧快照留在页面上。
+ipcMain.handle('weather:forecastMany', wrap(({ points, days }) => weather.forecastMany(points, days)));
 // 行程导出 Markdown:弹系统保存框,路径由用户定,应用不越权写 data/ 之外的地方
 ipcMain.handle('trip:export', async (_event, { defaultName, markdown }) => {
   const win = BrowserWindow.getAllWindows()[0];

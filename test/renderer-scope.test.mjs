@@ -194,3 +194,50 @@ test('筛选控件不得同时绑 change 与 input(否则每次筛选渲染两�
   const searchBody = app.slice(searchAt, app.indexOf('\n  });', searchAt));
   assert.ok(/setTimeout\(renderLibrary,\s*\d+\)/.test(searchBody), '搜索框必须防抖后再渲染');
 });
+
+// ---- 首屏渲染顺序:路线库必须在 config/区域/默认日期都就绪之后再画 ----
+// 旧顺序 initLibrary() 内部立刻 renderLibrary,而 appCfg 在它之后才赋值,
+// 首屏 191 张卡会先按代码默认房费/餐标和空日期算一遍,等异步身体状态回来才碰巧重刷。
+test('初始化顺序:appCfg 先于 initLibrary,renderLibrary 在回填日期之后', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
+  const at = app.indexOf('async function initInner');
+  assert.ok(at > 0, '找不到 initInner');
+  const body = app.slice(at, app.indexOf('\n}\n', at));
+  const cfgAt = body.indexOf('appCfg = cfg');
+  const libAt = body.indexOf('await initLibrary()');
+  const renderAt = body.lastIndexOf('renderLibrary()');
+  assert.ok(cfgAt > 0 && cfgAt < libAt, `appCfg 必须在 initLibrary 之前: cfg=${cfgAt} lib=${libAt}`);
+  assert.ok(libAt < renderAt, `首次 renderLibrary 必须在 initLibrary 之后: lib=${libAt} render=${renderAt}`);
+});
+
+// ---- 火车补估只能改总额/口径两处,不能整行 textContent 覆盖分项 chips ----
+test('lookupTransport 成功后保留分项 chips(只更新 data-total / data-tp)', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
+  const at = app.indexOf('async function lookupTransport');
+  assert.ok(at > 0, '找不到 lookupTransport');
+  const body = app.slice(at, app.indexOf('\n}\n', at));
+  assert.ok(body.includes("querySelector('[data-total]')"), '必须更新 data-total');
+  assert.ok(body.includes("querySelector('[data-tp]')"), '必须更新 data-tp');
+  assert.ok(!/line\.textContent\s*=/.test(body), '不能整行 textContent 覆盖,否则 chips 被抹掉');
+});
+
+// ---- 推荐请求竞态:只允许最新 seq 渲染/恢复按钮 ----
+test('runRecommend 用请求序号挡住晚到的旧结果', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
+  const at = app.indexOf('async function runRecommend');
+  assert.ok(at > 0, '找不到 runRecommend');
+  const body = app.slice(at, app.indexOf('\n}\n', at));
+  assert.ok(body.includes('++recSeq'), '每次请求必须取一个新的序号');
+  assert.ok(/if \(seq !== recSeq\) return;/.test(body), '旧请求完成/失败/收尾时必须检查序号');
+});
+
+// ---- 旧档天气刷新必须重取锚点,不能只改单点 forecast ----
+test('refreshArchiveWeather 用 weatherForecastMany 重取并重建 byDate', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
+  const at = app.indexOf('async function refreshArchiveWeather');
+  assert.ok(at > 0, '找不到 refreshArchiveWeather');
+  const body = app.slice(at, app.indexOf('\n}\n', at));
+  assert.ok(body.includes('weatherForecastMany'), '刷新必须走多点预报');
+  assert.ok(body.includes('trip.weather.byDate = byDate'), '必须重建 byDate');
+  assert.ok(body.includes('trip.weather.byDateError = null'), '成功刷新后要清掉旧的 byDateError');
+});

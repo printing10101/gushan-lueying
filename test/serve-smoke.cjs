@@ -10,6 +10,7 @@
 // 用法:npx electron test/serve-smoke.cjs   (全部通过 exit 0)
 // 不设 GUSHAN_SERVE:这里验的正是「自动开」——config 里有腾讯 Key 就该走本地 http 来源
 const { app, BrowserWindow } = require('electron');
+process.env.GUSHAN_SINGLE_INSTANCE = '0'; // 测试不能因为用户正开着应用就被单实例锁挡掉
 
 app.disableHardwareAcceleration();
 require('../electron/main.js');
@@ -60,7 +61,7 @@ app.whenReady().then(async () => {
       await sleep(500);
       regions = await evalIn("return document.getElementById('region') ? document.getElementById('region').options.length : 0;");
     }
-    check('区域下拉装满了(18 个区域)', regions >= 15, `选项 ${regions}`);
+    check('区域下拉装满了(至少 15 个)', regions >= 15, `选项 ${regions}`);
     const cards = await evalIn("return document.querySelectorAll('#lib-list details.route').length;");
     check('线路库卡片渲染出来了', cards > 100, `卡片 ${cards}`);
 

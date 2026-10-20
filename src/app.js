@@ -24,7 +24,7 @@ const { FIT_LABELS: FIT_TEXT, ADVICE_LABELS: ADVICE_TEXT } = LIB.fitness;
 // 海拔分档口径在 lib/filters.js(与单测同源);名字一律加后缀,避免与 lib 顶层声明撞名
 const { ALT_BANDS: ALT_BAND_LIST, hitAltBand: hitAltBandOf, byAlt: byAltDesc } = LIB.filters;
 const { normalizeRiskNotes: riskNotesOf } = LIB.risknotes;
-const { actualVsPlanned: actualVsPlannedOf } = LIB.actuals;
+const { actualVsPlanned: actualVsPlannedOf, parseActualCostInput: parseActualCost } = LIB.actuals;
 const { permitNotice: permitNoticeOf } = LIB.permit;
 
 // HTML 转义:数据(手编 JSON/网络返回/存档/报错原文)不该在页面上长成标签或逃出属性
@@ -43,6 +43,7 @@ let regionCache = {}; // 启动时一次载入的区域库,画图/行程复用,�
 let appCfg = {}; // 启动时一次载入的配置,卡片估算吃住用(渲染进程拿不到 require)
 let marks = {}; // 想去/走过标记(data/marks.json),路线库与推荐页共用
 let lastRecInput = null; // 最近一次推荐条件,标记变动后重跑推荐用
+let recSeq = 0; // 推荐请求序号:只让最新一次请求渲染,旧请求晚到不能覆盖新结果
 
 // 渲染进程拿不到 require,日期工具与 lib/planner.js 的 addDays 保持一致
 function addDaysStr(dateStr, n) {
@@ -55,6 +56,15 @@ function addDaysStr(dateStr, n) {
 // 本地时区的今天(toISOString 会因时区偏移差一天)
 function todayLocal() {
   const d = new Date();
+  const pad = (x) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// ISO 时间戳 → 本地日期/本地日期时间。存档里的 generatedAt 是 UTC,
+// 直接 slice(0,10) 会让中国时间 0–8 点生成的行程显示成前一天。
+function localDateOf(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
   const pad = (x) => String(x).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -75,9 +85,9 @@ async function initInner() {
   initTabs();
   marks = (await gushan.readData('marks')) || {};
   if (typeof marks !== 'object' || Array.isArray(marks)) marks = {};
-  await initLibrary();
-  initRecommend();
-  refreshBodyState(); // 异步拉取身体状态,不阻塞首屏,回来后各自重渲染
+  // 先载入估算口径与区域库,再第一次渲染路线库。
+  // 旧顺序是 initLibrary()(内部立刻 renderLibrary) → 才赋值 appCfg,
+  // 首屏 191 张卡会先用代码默认房费/餐标和空日期算一遍,等 RunOS 回来才碰巧重刷。
   const cfg = (await gushan.readData('config')) || {};
   appCfg = cfg;
   const regions = await gushan.readData('regions') || {};
@@ -97,6 +107,9 @@ async function initInner() {
   };
   // 出发站与区域枢纽是否同站:切区域、改站名都要即时判(默认值是成都东,选川西就会撞)
   $('origin').addEventListener('input', checkOriginVsHub);
+
+  // initLibrary 只载数据/绑事件,不渲染;等下面的日期回填完成后再统一渲染一次。
+  await initLibrary();
   // 上次规划条件回填(含区域联动),没有存档才落到默认值
   if (!restoreForm()) {
     drawRegion(regions[$('region').value]);
@@ -105,7 +118,9 @@ async function initInner() {
     $('start-date').value = addDaysStr(todayLocal(), 7);
   }
   checkOriginVsHub(); // 回填后也要判一次:上次存的站可能正等于这次选的区域枢纽
+  renderLibrary();
 
+  initRecommend();
   // 地图后台加载,不挡规划表单交互;就绪后补画当前区域与已展示的行程。
   // 实现层决定用哪家(腾讯需要非 file:// 来源)。**必须 catch**:不接的话任何异常
   // 都会变成未处理的 promise 拒绝——页面上什么都不显示,看着像"地图就是不出现",
@@ -122,6 +137,7 @@ async function initInner() {
   $('trail').addEventListener('change', updateTrailFitHint);
   // 改档次不会自动重算预算,改完立刻说破(与出发站撞枢纽同一套当场提醒的做法)
   $('tier').addEventListener('change', checkTierVsGenerated);
+  refreshBodyState(); // 异步拉取身体状态,不阻塞首屏,回来后各自重渲染
 }
 
 // 配置漂移提示:example 有而 config 没有的键位(主进程 readData('config') 附带 _gaps)。
@@ -616,7 +632,7 @@ async function renderResult(trip) {
       // 体能匹配按线路 id 查(自动选线的 id 就在 day.info 里),没有匹配结论就不显示
       body += fitLineHtml(bodyState?.matches?.[t.id || trip.input.trailId]);
       if (day.seasonWarn) body += `<p class="warn">错季提醒:${esc(day.seasonWarn)}</p>`;
-      if (wxMap.get(day.date)?.verdict === '不宜') {
+      if (wxToday?.verdict === '不宜') {
         body += '<p class="warn">当日天气不宜徒步,建议前后调整日期</p>';
       }
       if (shift) {
@@ -766,7 +782,7 @@ async function renderArchive() {
     ? `<div class="arch"><div class="arch-head"><b>${esc(t.id)}</b></div><p class="warn">${esc(t.error)}</p></div>`
     : `<div class="arch">
         <div class="arch-head"><b>${esc(t.regionName)} · ${t.days} 天</b><span class="arch-date">${esc(t.startDate)}</span></div>
-        <p class="muted">${t.trailName ? `徒步 ${esc(t.trailName)} · ` : ''}预算 ¥${t.total ?? '未知'} · 生成于 ${esc(String(t.generatedAt || '').slice(0, 10))}${t.actualCost != null ? ` · 实花 ¥${t.actualCost}` : ''}</p>
+        <p class="muted">${t.trailName ? `徒步 ${esc(t.trailName)} · ` : ''}预算 ¥${t.total ?? '未知'} · 生成于 ${esc(localDateOf(t.generatedAt))}${t.actualCost != null ? ` · 实花 ¥${t.actualCost}` : ''}</p>
         <div class="arch-ops"><button data-open="${esc(t.id)}">打开</button><button data-actual="${esc(t.id)}">记实花</button><button class="danger" data-del="${esc(t.id)}">删除</button></div>
       </div>`).join('')
     || '<p class="muted" style="padding:12px">还没有存档,去「行程规划」生成一次吧</p>';
@@ -793,13 +809,14 @@ async function renderArchive() {
 // 记一笔实际花费:估算参数(住宿/餐饮/油费)靠真实数据慢慢校准,数字进存档与档案列表
 async function recordActualCost(id) {
   const input = prompt('这次行程实际花了多少(元,按总花费计)?留空取消');
-  if (input === null) return;
-  const amount = Number(input);
-  if (!Number.isFinite(amount) || amount < 0) { alert('请输入非负数字'); return; }
+  const parsed = parseActualCost(input);
+  if (parsed.cancel) return;
+  if (parsed.error) { alert(parsed.error); return; }
+  const amount = parsed.value;
   try {
     const trip = await gushan.readData(`trips/${id}`);
     if (!trip) { alert(`存档 ${id} 不存在`); return; }
-    trip.actualCost = Math.round(amount);
+    trip.actualCost = amount;
     await gushan.writeData(`trips/${id}`, trip);
     renderArchive();
   } catch (e) {
@@ -832,6 +849,54 @@ function checkTierVsGenerated() {
     + '点「生成行程」才会按新档次重算预算。';
 }
 
+// 逐日天气锚点:与 lib/planner.js 的 dayAnchors 同语义(驾车日锚在当天最后一个节点,
+// 徒步日锚在徒步节点)。刷新旧档时必须按同一套锚点重取,不能只刷单点。
+function weatherAnchorsOf(trip) {
+  const out = [];
+  for (const day of trip?.schedule || []) {
+    if (day.type === 'drive' && day.legs && day.legs.length) {
+      out.push({ date: day.date, node: day.legs[day.legs.length - 1].to });
+    } else if (day.type === 'hike') {
+      const node = day.node || trip.trail?.node;
+      if (node) out.push({ date: day.date, node });
+    }
+  }
+  return out;
+}
+
+function forecastByDate(anchors, many) {
+  const byName = new Map((many || []).map((m) => [
+    m.name, new Map((m.forecast || []).map((f) => [f.date, f])),
+  ]));
+  const out = {};
+  for (const { date, node } of anchors || []) {
+    const wx = byName.get(node)?.get(date);
+    if (wx) out[date] = { ...wx, at: node };
+  }
+  return out;
+}
+
+async function refreshArchiveWeather(trip, region) {
+  const anchors = weatherAnchorsOf(trip);
+  const names = [...new Set(anchors.map((a) => a.node))];
+  const nodes = names.map((name) => (region?.loop || []).find((n) => n.name === name))
+    .filter((n) => n && Number.isFinite(Number(n.lng)) && Number.isFinite(Number(n.lat)));
+  if (!nodes.length || typeof gushan.weatherForecastMany !== 'function') {
+    throw new Error('没有可用的逐日天气锚点');
+  }
+  const many = await gushan.weatherForecastMany(
+    nodes.map((n) => ({ name: n.name, lng: Number(n.lng), lat: Number(n.lat) })), 16);
+  const byDate = forecastByDate(anchors, many);
+  if (!Object.keys(byDate).length) throw new Error('逐日天气锚点没有返回匹配的日期');
+  trip.weather.byDate = byDate;
+  trip.weather.byDateError = null;
+  const single = many.find((m) => m.name === trip.weather.node) || many[0];
+  if (single) {
+    trip.weather.forecast = single.forecast;
+    trip.weather.node = single.name;
+  }
+}
+
 // 打开档案:回填规划要素并切到规划页,方便在旧行程基础上改条件重新生成
 async function openArchive(id) {
   const trip = await gushan.readData(`trips/${id}`);
@@ -844,6 +909,9 @@ async function openArchive(id) {
     $('region').onchange();
     const backIds = trip.input.trailIds || (trip.input.trailId ? [trip.input.trailId] : []);
     await refreshTrailOptions(trip.input.regionId, backIds[0] || '', backIds[1] || '');
+    // 出发站是查询往返车次的前提,不能漏回填:漏了就会拿当前表单的站去重查
+    // 一个完全不同的出发地,用户还以为在看同一份旧档。
+    if (trip.input.originStation) $('origin').value = trip.input.originStation;
     if (trip.input.startDate) $('start-date').value = trip.input.startDate;
     if (trip.input.days) $('days').value = trip.input.days;
     if (trip.input.headcount) $('headcount').value = trip.input.headcount;
@@ -853,17 +921,14 @@ async function openArchive(id) {
   }
   document.querySelector('#tabs [data-view="planner"]').click();
   await renderResult(trip);
-  // 存档里的天气是生成当天的快照:拉一次最新预报重刷;失败就明示快照日期,不静默装新
+  // 存档里的天气是生成当天的快照:重取所有锚点的逐日预报再重刷;
+  // 失败就明示快照日期,不静默装新,也不把旧 byDate 留在"已刷新"标签下面。
   try {
-    const region = regionCache[trip.input.regionId];
-    const node = region?.loop?.find((n) => n.name === trip.weather?.node);
-    if (node && gushan.weatherForecast) {
-      trip.weather.forecast = await gushan.weatherForecast(node.lng, node.lat, 16);
-      await renderResult(trip);
-      renderWeather(trip.weather, '<span class="muted">已刷新为最新预报</span>');
-    }
+    await refreshArchiveWeather(trip, regionCache[trip.input.regionId]);
+    await renderResult(trip);
+    renderWeather(trip.weather, '<span class="muted">已刷新为最新预报</span>');
   } catch {
-    renderWeather(trip.weather, `<span class="muted">天气为 ${String(trip.generatedAt || '').slice(0, 10)} 快照,刷新失败</span>`);
+    renderWeather(trip.weather, `<span class="muted">天气为 ${localDateOf(trip.generatedAt)} 快照,刷新失败</span>`);
   }
 }
 
@@ -978,6 +1043,7 @@ async function initLibrary() {
     try {
       await loadLibraryData();
       refreshTrailOptions($('region').value);
+      refreshRecommendControls();
       renderLibrary();
       await refreshBodyState(true);
     } finally {
@@ -985,7 +1051,7 @@ async function initLibrary() {
       btn.textContent = '重载线路库';
     }
   };
-  renderLibrary();
+  // 首次渲染由 initInner 在 config/区域/默认日期都就绪后统一调用。
 }
 
 function renderLibrary() {
@@ -1031,7 +1097,7 @@ function renderLibrary() {
   const sections = [...groups.entries()]
     .sort((a, b) => provinceOrder.get(a[0]) - provinceOrder.get(b[0]))
     .map(([prov, routes]) =>
-      `<h2 class="prov-head"><span class="prov-name">${prov}</span><span class="prov-count">${routes.length} 条</span></h2>`
+      `<h2 class="prov-head"><span class="prov-name">${esc(prov)}</span><span class="prov-count">${routes.length} 条</span></h2>`
       + routes.sort(sorters[$('lib-sort').value]).map(routeHtml).join(''))
     .join('');
 
@@ -1069,7 +1135,7 @@ function wireMarkButtons(root) {
     btn.onclick = async () => {
       const id = btn.dataset.done;
       const input = prompt('走过日期(YYYY-MM-DD);清空内容并确定可取消标记:',
-        marks[id]?.doneAt || new Date().toISOString().slice(0, 10));
+        marks[id]?.doneAt || todayLocal());
       if (input === null) return;
       const date = input.trim();
       if (!date) delete marks[id]?.doneAt;
@@ -1177,6 +1243,20 @@ async function saveMarks() {
 // 路线库一键规划:切到规划页并预选区域与该线路,填好日期即可生成
 async function planFromLibrary(trailId, regionId, tier = null) {
   document.querySelector('#tabs [data-view="planner"]').click();
+  // 推荐页的价格是用 rec-origin / rec-date / rec-headcount / rec-tier 算的;
+  // 点「用这条线规划」时只带档次会把同一趟行程拆成两个口径。
+  // tier 只有推荐页会传,因此拿它当"来自推荐页"的开关。
+  if (tier !== null) {
+    const recOrigin = $('rec-origin').value.trim();
+    const recDate = $('rec-date').value;
+    const recHeadcount = toPositive($('rec-headcount').value);
+    if (recOrigin) {
+      $('origin').value = recOrigin;
+      rememberOrigin(recOrigin);
+    }
+    if (recDate) $('start-date').value = recDate;
+    if (recHeadcount) $('headcount').value = recHeadcount;
+  }
   // 档次跟着过来(只有推荐页会传):推荐价是照它算的,这里不接上就是口径分家。
   // 只接受控件里真有的档名——传进来一个不存在的值赋给 select 会静默变成空选。
   const tierSel = $('tier');
@@ -1247,14 +1327,14 @@ function costLineHtml(t) {
   if (t._transport) {
     const tp = t._transport;
     return `<p class="cost-est" data-cost="${esc(t.id)}" data-land="${bd.total}" data-transport-done="1">`
-      + `${esc(`人均约 ¥${bd.total + tp.perPerson}(落地 ¥${bd.total} + 往返火车约 ¥${tp.perPerson},${tp.note})`)}`
+      + `<span data-total>${esc(`人均约 ¥${bd.total + tp.perPerson}(落地 ¥${bd.total} + 往返火车约 ¥${tp.perPerson},${tp.note})`)}</span>`
       + `${factor}${chips}</p>`;
   }
   const tpNote = currentOrigin()
     ? ';往返火车未含(展开后按出发站补估)'
     : ';未含往返大交通,填出发站可估';
   return `<p class="cost-est" data-cost="${esc(t.id)}" data-land="${bd.total}">`
-    + `${esc(`人均落地约 ¥${bd.total}`)}<span data-tp>${esc(tpNote)}</span>${factor}${chips}</p>`;
+    + `<span data-total>${esc(`人均落地约 ¥${bd.total}`)}</span><span data-tp>${esc(tpNote)}</span>${factor}${chips}</p>`;
 }
 
 // 卡片展开是显式动作,往返火车估算在此按需查询(主进程会话内按枢纽缓存),不拖累列表首屏
@@ -1297,7 +1377,9 @@ async function lookupTransport(line, origin, force) {
   }
   line.dataset.transportDone = '1';
   const land = Number(line.dataset.land);
-  line.textContent = `人均约 ¥${land + res.perPerson}(落地 ¥${land} + 往返火车约 ¥${res.perPerson},${res.note})`;
+  const total = line.querySelector('[data-total]');
+  if (total) total.textContent = `人均约 ¥${land + res.perPerson}(落地 ¥${land} + 往返火车约 ¥${res.perPerson})`;
+  if (note) note.textContent = `;${res.note || '往返火车估算'}`;
 }
 
 // 风险出处:口径在 lib/risknotes.js(与单测同源)。有出处就写出处,填不出就明说「未核实」;
@@ -1397,14 +1479,14 @@ function routeHtml(t) {
       ${oneTimeHtml(t)}
       ${costLineHtml(t)}
       <p class="mark-ops">
-        <button class="mark-btn${mk.wanted ? ' on' : ''}" data-want="${t.id}">${mk.wanted ? '★ 已在想去' : '☆ 想去'}</button>
-        <button class="mark-btn${mk.doneAt ? ' on' : ''}" data-done="${t.id}">${mk.doneAt ? `✓ 已走过 ${String(mk.doneAt).slice(5)}` : '标记走过'}</button>
-        <button class="mark-btn${mk.actualDistanceKm || mk.actualDays || mk.actualClimbM ? ' on' : ''}" data-actual="${t.id}"
+        <button class="mark-btn${mk.wanted ? ' on' : ''}" data-want="${esc(t.id)}">${mk.wanted ? '★ 已在想去' : '☆ 想去'}</button>
+        <button class="mark-btn${mk.doneAt ? ' on' : ''}" data-done="${esc(t.id)}">${mk.doneAt ? `✓ 已走过 ${esc(String(mk.doneAt).slice(5))}` : '标记走过'}</button>
+        <button class="mark-btn${mk.actualDistanceKm || mk.actualDays || mk.actualClimbM ? ' on' : ''}" data-actual="${esc(t.id)}"
           title="记下实走的天数/里程/爬升,与线路库标称值对比">记实走</button>
-        <button class="mark-btn" data-gpx="${t.id}" title="选一个 GPX(两步路/六只脚/Strava 导出),用它量出的实测量校标称值;差太多的不写,要人判">导入 GPX</button>
+        <button class="mark-btn" data-gpx="${esc(t.id)}" title="选一个 GPX(两步路/六只脚/Strava 导出),用它量出的实测量校标称值;差太多的不写,要人判">导入 GPX</button>
       </p>
       ${t.regionId
-        ? `<p><button class="lib-plan" data-plan="${t.id}|${t.regionId}">用这条线规划行程</button></p>`
+        ? `<p><button class="lib-plan" data-plan="${esc(t.id)}|${esc(t.regionId)}">用这条线规划行程</button></p>`
         : '<p class="muted">未接入行程规划(线路需标注 regionId 与环线节点)</p>'}
     </div>
   </details>`;
@@ -1416,17 +1498,21 @@ function routeHtml(t) {
 
 const recSelected = new Set();
 
-function initRecommend() {
-  // chips 由词表生成,数字是路线库内可命中的条数,零命中的词不显示
+// 推荐页的筛选控件由当前线路库生成。重载线路库后必须重建,
+// 否则新加的省份/景色词还停留在启动时那份数据里。
+function refreshRecommendControls() {
   const counts = {};
   for (const t of libTrails) for (const s of t.scenery || []) counts[s] = (counts[s] || 0) + 1;
+  const available = new Set(Object.keys(counts));
+  for (const tag of [...recSelected]) if (!available.has(tag)) recSelected.delete(tag);
+  $('rec-scenery').innerHTML = '';
   for (const tag of SCENERY_TAGS) {
     if (!counts[tag]) continue;
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'scn-chip';
+    chip.className = `scn-chip${recSelected.has(tag) ? ' on' : ''}`;
     chip.dataset.tag = tag;
-    chip.setAttribute('aria-pressed', 'false');
+    chip.setAttribute('aria-pressed', String(recSelected.has(tag)));
     chip.textContent = `${tag} · ${counts[tag]}`;
     chip.onclick = () => {
       const on = chip.classList.toggle('on');
@@ -1435,10 +1521,19 @@ function initRecommend() {
     };
     $('rec-scenery').append(chip);
   }
-  // 省份限定:想"只看新疆"时不用翻整库
+  // 省份限定:想"只看新疆"时不用翻整库;重载后保留用户已选省份
+  const keepProvince = $('rec-province').value;
+  $('rec-province').innerHTML = '<option value="">全部省份</option>';
   for (const p of [...new Set(libTrails.map((t) => t.province))].sort()) {
     $('rec-province').append(new Option(p, p));
   }
+  if ([...$('rec-province').options].some((o) => o.value === keepProvince)) {
+    $('rec-province').value = keepProvince;
+  }
+}
+
+function initRecommend() {
+  refreshRecommendControls();
   $('rec-go').onclick = runRecommend;
   // 难度是「门槛」不是「偏好」:改了即刻重算,不要求用户再点一次「帮我推荐」。
   // 只在已经推荐过、或已填了条件时才自动跑,避免刚进页面就发请求。
@@ -1473,6 +1568,7 @@ function initRecommend() {
 }
 
 async function runRecommend() {
+  const seq = ++recSeq;
   $('rec-msg').textContent = '';
   const budget = toPositive($('rec-budget').value);
   const maxDays = toPositive($('rec-days').value);
@@ -1496,12 +1592,16 @@ async function runRecommend() {
   if (originStation) $('rec-msg').textContent = '正在按出发站估算往返火车实价…(每个枢纽只查一次,首条推荐稍慢)';
   $('rec-go').disabled = true; // 推荐期间禁点:连点会对 12306 并发两轮估算
   try {
-    renderRecommend(await gushan.recommendTrails(input), input);
+    const list = await gushan.recommendTrails(input);
+    if (seq !== recSeq) return; // 旧请求晚到:丢弃,不让它覆盖新条件的结果
+    renderRecommend(list, input);
     $('rec-msg').textContent = '';
     rememberOrigin(originStation);
   } catch (e) {
+    if (seq !== recSeq) return;
     $('rec-msg').textContent = `推荐失败:${e.message}`;
   } finally {
+    if (seq !== recSeq) return;
     $('rec-go').disabled = false;
     // 难度档与花费口径记住:下次进来还是同一套条件,不用重新选
     try {
@@ -1558,10 +1658,12 @@ function recCardHtml(r, i, input) {
   const t = r.trail;
   // 口径:填了出发站且查到实价 → 人均 = 落地 + 往返火车估算;否则仅落地,卡片言明未含
   const est = r.estAll ?? r.est;
+  const unknown = Number(r.budgetUnknown ?? r.unknownCount ?? 0);
   const fit = input.budget
     ? (r.overBudget
       ? `<span class="status st-bad">超预算 ¥${r.overBudget}</span>`
-      : '<span class="status st-open">预算内</span>')
+      : `<span class="status st-open"${unknown ? ` title="合计里有 ${unknown} 项未含(门票/附加费/大交通),按已知项仍在预算内"` : ''}>`
+        + `${unknown ? `预算内(未含 ${unknown} 项)` : '预算内'}</span>`)
     : '';
   const hits = r.hits.length ? `<span class="rec-hit">景色命中:${esc(r.hits.join('、'))}</span>` : '';
   // 门票没标就要显式挂出来:现在未知项不进合计(旧口径按 0 计),不说就等于让人以为不用买票

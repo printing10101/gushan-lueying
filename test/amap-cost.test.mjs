@@ -21,6 +21,20 @@ test('calcCosts:优先用高德返回的过路费', () => {
   assert.equal(c.driveTotal, 317);
 });
 
+test('calcCosts:油耗/油价缺失或非法时响亮报错,不返回 NaN', () => {
+  for (const bad of [
+    {},
+    { consumptionLPer100km: 8 },
+    { pricePerL: 8.2 },
+    { consumptionLPer100km: 0, pricePerL: 8.2 },
+    { consumptionLPer100km: 8, pricePerL: -1 },
+    { consumptionLPer100km: NaN, pricePerL: 8.2 },
+  ]) {
+    assert.throws(() => amap.calcCosts(100, null, bad), /油费配置|油耗|油价/,
+      `fuel=${JSON.stringify(bad)} 必须响亮报错,不能算出 NaN`);
+  }
+});
+
 // drivingRoute 会先读真实 config 拿 key;测试里 patch 同一 store 实例,注入测试 key
 const store = require('./lib/store.js');
 

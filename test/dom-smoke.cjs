@@ -11,6 +11,7 @@
 //
 // 用法:npx electron test/dom-smoke.cjs   (全部通过 exit 0)
 process.env.GUSHAN_SERVE = '0'; // 这条冒烟专门测 file:// 那条路径(自动开之后必须显式锁住)
+process.env.GUSHAN_SINGLE_INSTANCE = '0'; // 测试不能因为用户正开着应用就被单实例锁挡掉
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -67,10 +68,19 @@ app.whenReady().then(async () => {
     return finish(1);
   }
   win.hide(); // 不打扰用户桌面;DOM 与 JS 照常执行
+  win.webContents.on('console-message', (_event, level, message) => {
+    if (level >= 2) console.log(`[renderer console] ${message}`);
+  });
   await sleep(3000); // 等 initLibrary 的异步数据载入
 
   // 在页面里切一个下拉框并回读计数;exec 返回 null 表示脚本自己炸了(下面逐条判空)
-  const evalIn = (code) => win.webContents.executeJavaScript(`(() => {${code}})()`);
+  const evalIn = (code) => win.webContents.executeJavaScript(`(async () => {${code}})()`);
+  const evalSafe = async (code, label) => {
+    try { return await evalIn(code); } catch (e) {
+      console.log(`[eval fail] ${label}: ${e.message}`);
+      return { __error: e.message };
+    }
+  };
 
   try {
     // ---- 启动横幅:任何 initInner 抛错都会在这里留一条「启动失败:…」 ----
@@ -400,6 +410,113 @@ app.whenReady().then(async () => {
       tk.hasBtn === true && String(tk.href).startsWith('https://'), String(tk.href));
     check('去程没票时写明原因(预售期 / 真没车 / 取价失败三者之一)',
       /超出 12306 预售期|没有可购车次|取价失败/.test(tripUi.resultText), tripUi.resultText.slice(0, 160));
+
+    // ---- 打开旧档必须回填出发站(否则重生成会查错出发地) ----
+    const tempTrip = JSON.parse(JSON.stringify(synthTrip));
+    tempTrip.id = '__dom_origin__';
+    tempTrip.input = { ...tempTrip.input, originStation: '西安北', regionId: 'chuanxi', trailIds: [] };
+    tempTrip.schedule = []; // 只验回填,不让天气刷新在后台发网络请求干扰后续断言
+    store.write('trips/__dom_origin__', tempTrip);
+    const opened = await evalSafe(`
+      document.getElementById('origin').value = '成都东';
+      openArchive('__dom_origin__');
+      await new Promise((r) => setTimeout(r, 700));
+      return { origin: document.getElementById('origin').value,
+        archived: currentTrip && currentTrip.input && currentTrip.input.originStation };`, 'openArchive');
+    store.remove('trips/__dom_origin__');
+    check('打开旧档回填出发站(西安北而不是当前表单的成都东)',
+      opened.origin === '西安北' && opened.archived === '西安北', JSON.stringify(opened));
+
+    // ---- 记实花留空必须取消,不能写 ¥0 ----
+    const actualTrip = JSON.parse(JSON.stringify(synthTrip));
+    actualTrip.id = '__dom_actual__';
+    store.write('trips/__dom_actual__', actualTrip);
+    const blankActual = await evalSafe(`
+      window.prompt = () => '';
+      await recordActualCost('__dom_actual__');
+      const t = await gushan.readData('trips/__dom_actual__');
+      return { has: !!t && Object.prototype.hasOwnProperty.call(t, 'actualCost'), value: t && t.actualCost };`, 'blankActual');
+    store.remove('trips/__dom_actual__');
+    check('记实花留空不写 actualCost=0', blankActual.has === false, JSON.stringify(blankActual));
+
+    // ---- 推荐页 → 规划页:出发站/日期/人数/档次都要带过去 ----
+    const carried = await evalSafe(`
+      document.getElementById('rec-origin').value = '西安北';
+      document.getElementById('rec-date').value = '2026-12-01';
+      document.getElementById('rec-headcount').value = '3';
+      document.getElementById('rec-tier').value = '青旅';
+      await planFromLibrary('changpinggou', 'chuanxi', '青旅');
+      return { origin: document.getElementById('origin').value,
+        date: document.getElementById('start-date').value,
+        headcount: document.getElementById('headcount').value,
+        tier: document.getElementById('tier').value };`, 'planFromLibrary');
+    check('推荐页条件完整带到规划页',
+      carried.origin === '西安北' && carried.date === '2026-12-01'
+        && carried.headcount === '3' && carried.tier === '青旅', JSON.stringify(carried));
+
+    // ---- 天气 chip 与"不宜徒步"警告必须同源 ----
+    const wxMismatch = await evalSafe(`
+      const t = JSON.parse(JSON.stringify(${JSON.stringify(synthTrip)}));
+      const hikeDate = '2026-10-22';
+      t.weather.forecast = t.weather.forecast.map((w) => ({ ...w, verdict: '宜' }));
+      t.weather.byDate = { [hikeDate]: { ...t.weather.byDate[hikeDate], verdict: '不宜' } };
+      await renderResult(t);
+      const chip = document.querySelector('#result .day-wx');
+      return { chip: chip ? chip.textContent : '', text: document.getElementById('result').textContent.replace(/\\s+/g, ' ') };`, 'weather');
+    check('byDate 判不宜时 chip 与警告一致',
+      wxMismatch.chip === '不宜' && wxMismatch.text.includes('当日天气不宜徒步'), JSON.stringify(wxMismatch));
+
+    // ---- 逐日天气锚点合并(刷新旧档用的纯函数) ----
+    const wxMerge = await evalSafe(`
+      const t = JSON.parse(JSON.stringify(${JSON.stringify(synthTrip)}));
+      const anchors = weatherAnchorsOf(t);
+      const many = [{ name: 'B', forecast: [
+        { date: '2026-10-21', label: '新', tempMin: 1, tempMax: 2, precipProb: 3, verdict: '宜' },
+        { date: '2026-10-22', label: '新', tempMin: 1, tempMax: 2, precipProb: 3, verdict: '观察' },
+      ] }];
+      return { anchors, byDate: forecastByDate(anchors, many) };`, 'weatherMerge');
+    check('逐日天气按锚点合并并带 at 来源',
+      wxMerge.byDate && wxMerge.byDate['2026-10-21'] && wxMerge.byDate['2026-10-21'].at === 'B'
+        && wxMerge.byDate['2026-10-22'].verdict === '观察', JSON.stringify(wxMerge));
+
+    // ---- 推荐卡预算角标:未知项必须写明未含,不能裸叫"预算内" ----
+    const badge = await evalSafe(`
+      const base = libTrails.find((x) => x.tickets == null) || libTrails[0];
+      const html = recCardHtml({ trail: base, id: base.id, hits: [], est: 300, estAll: 300,
+        overBudget: 0, transport: null, unknownCount: 1, budgetUnknown: 1 }, 0,
+        { budget: 500, date: null, headcount: 1, tier: '客栈', originStation: '' });
+      return { text: html.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ') };`, 'budgetBadge');
+    check('未含项时预算角标写「预算内(未含 N 项)」',
+      badge.text.includes('预算内(未含 1 项)'), String(badge.text).slice(0, 160));
+
+    // ---- 推荐页筛选控件在库重载后能重建(用新省份验证) ----
+    const controls = await evalSafe(`
+      const saved = libTrails;
+      libTrails = [...saved, { ...saved[0], province: '__新省__' }];
+      refreshRecommendControls();
+      const hasProvince = [...document.getElementById('rec-province').options].some((o) => o.value === '__新省__');
+      libTrails = saved;
+      refreshRecommendControls();
+      return { hasProvince };`, 'refreshRecommendControls');
+    check('重载后推荐页省份筛选跟着更新', controls.hasProvince === true, JSON.stringify(controls));
+
+    // ---- 渲染层配置不暴露 Web 服务 Key ----
+    const cfgKeys = await evalSafe('return Object.keys(appCfg || {});', 'cfgKeys');
+    check('渲染层配置不含 amapKeyWeb / tencentKeyWeb',
+      !cfgKeys.includes('amapKeyWeb') && !cfgKeys.includes('tencentKeyWeb'), JSON.stringify(cfgKeys));
+
+    // ---- 数据进 innerHTML 前必须转义 ----
+    const xss = await evalSafe(`
+      const saved = libTrails;
+      libTrails = [{ ...saved[0], province: '<img id="xss-probe" src=x>' }];
+      renderLibrary();
+      const hit = !!document.querySelector('#lib-list #xss-probe');
+      const prov = document.querySelector('#lib-list .prov-name');
+      const shown = prov ? prov.textContent : '';
+      libTrails = saved;
+      renderLibrary();
+      return { hit, shown };`, 'xss');
+    check('省份名进入 innerHTML 前已转义', xss.hit === false && xss.shown.includes('<img'), JSON.stringify(xss));
 
   } catch (e) {
     check('执行 DOM 冒烟脚本', false, e.message);

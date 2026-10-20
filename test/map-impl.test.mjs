@@ -92,3 +92,13 @@ test('centerOf:有环线就取首节点,没有就用兜底中心', () => {
   const fallback = M.centerOf(null);
   assert.ok(Number.isFinite(fallback.lng) && Number.isFinite(fallback.lat));
 });
+
+test('tripTrailStarts:多线串联时返回全部合法起点,坏坐标过滤', () => {
+  const a = { name: '甲', start: { lng: 100, lat: 30 } };
+  const b = { name: '乙', start: { lng: 101, lat: 31 } };
+  const bad = { name: '坏', start: { lng: 'x', lat: 31 } };
+  const starts = M.tripTrailStarts({ trail: a, trails: [a, b, bad] });
+  assert.deepEqual(starts.map((x) => x.name), ['甲', '乙']);
+  assert.deepEqual(M.tripTrailStarts({ trail: a }).map((x) => x.name), ['甲']);
+  assert.deepEqual(M.tripTrailStarts({}), []);
+});

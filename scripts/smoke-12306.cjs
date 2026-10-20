@@ -6,7 +6,10 @@ async function run(log) {
   const rail = require('../lib/rail12306');
   const idx = process.argv.indexOf('--smoke=rail');
   const args = idx > -1 ? process.argv.slice(idx + 1) : process.argv.slice(2);
-  const [from = '成都东', to = '西安北', date = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10)] = args;
+  const d = new Date(Date.now() + 3 * 864e5);
+  const pad = (x) => String(x).padStart(2, '0');
+  const defaultDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const [from = '成都东', to = '西安北', date = defaultDate] = args;
 
   const lines = [];
   const say = (s) => { lines.push(s); log(s); };

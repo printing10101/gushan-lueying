@@ -16,7 +16,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { actualVsPlanned, REVIEW_PCT } = require('./lib/actuals.js');
+const { actualVsPlanned, parseActualCostInput, REVIEW_PCT } = require('./lib/actuals.js');
 
 const row = (r, key) => r.rows.find((x) => x.key === key);
 
@@ -87,4 +87,14 @@ test('每行自带单位与标签,渲染层不必再猜', () => {
   const d = row(r, 'days');
   assert.ok(d.label && typeof d.label === 'string');
   assert.ok(d.unit && typeof d.unit === 'string');
+});
+
+test('parseActualCostInput:空串/空格是取消,不是 ¥0', () => {
+  for (const v of ['', '   ', undefined, null, 0]) {
+    assert.deepEqual(parseActualCostInput(v), { cancel: true }, `${JSON.stringify(v)} 应当取消`);
+  }
+  assert.deepEqual(parseActualCostInput('321.4'), { value: 321 });
+  assert.deepEqual(parseActualCostInput(' 0 '), { value: 0 }, '显式 0 是合法输入');
+  assert.deepEqual(parseActualCostInput('-1'), { error: '请输入非负数字' });
+  assert.deepEqual(parseActualCostInput('abc'), { error: '请输入非负数字' });
 });

@@ -100,6 +100,25 @@ test('write:结尾补换行,与 data/*.json 的存盘格式一致', () => {
   }
 });
 
+test('write:落盘失败时不能先毁掉旧文件(临时文件 + rename)', () => {
+  const name = 'trips/__store_atomic__';
+  const file = store.resolvePath(name);
+  const realRename = fs.renameSync;
+  try {
+    store.write(name, { version: 1 });
+    fs.renameSync = () => { throw new Error('simulated rename failure'); };
+    assert.throws(() => store.write(name, { version: 2 }), /simulated rename failure/);
+    fs.renameSync = realRename;
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).version, 1,
+      '新内容没写成就必须保留旧内容,不能留下半截文件');
+    const leftovers = fs.readdirSync(path.dirname(file)).filter((f) => f.startsWith('__store_atomic__') && f !== '__store_atomic__.json');
+    assert.deepEqual(leftovers, [], `失败的临时文件要清理,实得 ${leftovers.join(',')}`);
+  } finally {
+    fs.renameSync = realRename;
+    store.remove(name);
+  }
+});
+
 // ---- 打包运行时的数据目录:别把用户数据丢在临时解包目录里 ----
 // 由来:portable exe 每次启动都解包到 %TEMP% 再运行,那里 data/ 只是只读种子;
 // 用户填的 Key、生成的行程会在退出时消失(实测:那个 data/ 里没有 config.json)。

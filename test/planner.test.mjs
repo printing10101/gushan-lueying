@@ -538,6 +538,19 @@ test('tripIdFor:同条件重生成算刷新,换线路/换天数就另开一档,�
   assert.equal(tripIdFor({ base: 'd-r', input: mk({ input: { ...A.input, trailId: 'e' } }).input, lookup: (id) => three[id] || null }), 'd-r-4');
 });
 
+test('tripIdFor:trailIds 集合参与比较,顺序不同算同一条;换集合必须另开档', () => {
+  const A = { input: { trailIds: ['a', 'b'], days: 7, headcount: 2 } };
+  const sameOrder = { ...A.input, trailIds: ['b', 'a'] };
+  const different = { ...A.input, trailIds: ['a', 'c'] };
+  assert.equal(tripIdFor({ base: 'd-r', input: sameOrder, lookup: (id) => (id === 'd-r' ? A : null) }), 'd-r',
+    '同一组线路只是选择顺序不同,不应无端另开一档');
+  assert.equal(tripIdFor({ base: 'd-r', input: different, lookup: (id) => (id === 'd-r' ? A : null) }), 'd-r-2',
+    '换线路集合必须另开一档');
+  // 旧档只有 trailId、新输入只有 trailIds 时也要能对上(向后兼容)
+  const legacy = { input: { trailId: 'a', days: 7, headcount: 2 } };
+  assert.equal(tripIdFor({ base: 'd-r', input: { ...legacy.input, trailIds: ['a'] }, lookup: (id) => (id === 'd-r' ? legacy : null) }), 'd-r');
+});
+
 test('noTrailHint:天数放不下时说清最短线路与建议天数,而不是让行程长出 0 个徒步日', () => {
   const trails = {
     a: { regionId: 'zd', days: 4, name: '四天线', status: '开放' },
@@ -718,6 +731,29 @@ test('validateTripInput:出发站为空要挡下', () => {
     const errs = validateTripInput({ startDate: '2026-10-20', days: 7, originStation: s });
     assert.ok(errs && errs.some((e) => e.includes('出发站为空')), `${JSON.stringify(s)} 应被挡下`);
   }
+});
+
+test('validateTripInput:人数必须是有限整数,不能把 Infinity/小数带进预算', () => {
+  const { validateTripInput } = P;
+  for (const h of [0, -1, 1.5, Infinity, -Infinity, NaN]) {
+    const errs = validateTripInput({ startDate: '2026-10-20', days: 7, originStation: '西安北', headcount: h });
+    assert.ok(errs && errs.some((e) => e.includes('出行人数非法')),
+      `headcount=${String(h)} 应被挡下,实得 ${JSON.stringify(errs)}`);
+  }
+  assert.equal(validateTripInput({ startDate: '2026-10-20', days: 7, originStation: '西安北', headcount: 3 }), null);
+  assert.equal(validateTripInput({ startDate: '2026-10-20', days: 7, originStation: '西安北', headcount: '3' }), null,
+    '表单字符串要认,但必须在 generate 里归一化成数字');
+});
+
+test('validateTripInput:日历上不存在的日子(2 月 31 日)也必须挡下', () => {
+  const { validateTripInput } = P;
+  for (const d of ['2026-02-29', '2026-02-31', '2026-04-31', '2026-06-31', '2026-09-31', '2026-11-31']) {
+    const errs = validateTripInput({ startDate: d, days: 7, originStation: '西安北' });
+    assert.ok(errs && errs.some((e) => e.includes('出发日期非法')),
+      `${d} 是日历上不存在的日子,应被挡下,实得 ${JSON.stringify(errs)}`);
+  }
+  assert.equal(validateTripInput({ startDate: '2028-02-29', days: 7, originStation: '西安北' }), null,
+    '闰年 2 月 29 是合法的');
 });
 
 test('validateTripInput:多条错误一次全报,不是只报第一条', () => {

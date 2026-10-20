@@ -220,6 +220,13 @@ test('beyondPresale:15 天外算超预售期,格式坏不算', () => {
   assert.equal(rail.beyondPresale('', now), false);
 });
 
+test('beyondPresale:凌晨按本地日期算,不能被 UTC 日期差一天', () => {
+  // 中国时间 00:30 时 UTC 还是前一天;旧实现用 toISOString() 会把边界提前一天
+  const now = new Date('2026-10-20T00:30:00+08:00').getTime();
+  assert.equal(rail.beyondPresale('2026-11-04', now), false, '本地第 15 天仍在预售期内');
+  assert.equal(rail.beyondPresale('2026-11-05', now), true);
+});
+
 // ---------- 往返大交通估算 ----------
 
 test('estimateDate:落在预售期内,格式为 YYYY-MM-DD', () => {

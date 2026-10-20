@@ -137,3 +137,9 @@ test('GPX token 不能只靠下次签发时清理(要有定时清理且不拖住
   assert.ok(body.includes('setTimeout'), '要挂定时清理,否则导一次后就不再操作会一直留到进程结束');
   assert.ok(body.includes('unref'), '定时器必须 unref(),不然会拖住应用退出');
 });
+
+test('单实例锁仍在(两个实例同时写 marks/trips 会互相覆盖),且测试可用环境变量绕开', () => {
+  assert.ok(/requestSingleInstanceLock\(\)/.test(MAIN), '必须有单实例锁');
+  assert.ok(/GUSHAN_SINGLE_INSTANCE/.test(MAIN), '测试需要显式绕开锁的开关');
+  assert.ok(/second-instance/.test(MAIN), '第二次启动应把已有窗口叫到前面');
+});
