@@ -20,7 +20,7 @@
     "smoke:region": "node scripts/smoke-region.mjs",
     "smoke:dom": "electron test/dom-smoke.cjs",
     "preview": "node test/make-preview.mjs && node scripts/preview-server.mjs",
-    "dist": "electron-builder --win portable",
+    "dist": "electron-builder --win portable --config.electronDist=node_modules/electron/dist",
     "shortcut": "node scripts/make-shortcut.mjs",
     "smoke:serve": "electron test/serve-smoke.cjs"
   },
