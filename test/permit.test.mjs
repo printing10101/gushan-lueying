@@ -1,6 +1,6 @@
 // 管控/禁入线路的报备口径。纯函数,渲染层经 window.GushanLib.permit 取同一实现。
 //
-// 背景:status 实测分布 开放150 / 管控21 / 部分管控16 / 关闭1 / 禁入3 —— 有 41 条被拦,
+// 背景:status 实测分布 开放149 / 管控21 / 部分管控15 / 关闭1 / 禁入5 —— 有 42 条被拦,
 // 但界面只说"有警示",没告诉用户"要怎么办才能走"。借鉴 Summitra 路线库右上角那个
 // 「山峰申请」入口:管控不等于死路,报备路径本身才是有用的信息。
 //
@@ -97,7 +97,7 @@ test('needed 不是布尔时判未核实并留脏痕(形状写错不能伪装成
   assert.equal(normalizePermit({}).dirty, 0, '压根没填不是脏数据,不该计脏');
 });
 
-test('全库不变量:41 条受限线路过 normalize 都不抛错、不留脏,且受限名单没膨胀', () => {
+test('全库不变量:42 条受限线路过 normalize 都不抛错、不留脏,且受限名单没膨胀', () => {
   const all = Object.entries(TRAILS);
   const restricted = all.filter(([, t]) => RESTRICTED.includes(t.status));
   assert.ok(restricted.length >= 40,
