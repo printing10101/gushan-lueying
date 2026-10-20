@@ -96,6 +96,7 @@ node scripts/import-gpx.mjs 轨迹.gpx --trail wusun --apply   # 确认后才写
 node scripts/label-backlog.mjs              # 标注欠账:缺 tickets/risks/supplies/bestMonths/regionId/riskNotes/permit
 node scripts/apply-ticket-audit-20261020.mjs # 门票审计:试运行,列出有出处/需改未知的条目
 node scripts/apply-ticket-audit-20261020.mjs --apply # 写回 data/trails.json
+node scripts/apply-permit-audit-20261020.mjs --apply  # 受限线路的官方禁止/关闭通告入档
 ```
 
 线路接入行程规划需要 `regionId`(34 个环线区域之一)+ `node`(该区域环线上的节点)。
