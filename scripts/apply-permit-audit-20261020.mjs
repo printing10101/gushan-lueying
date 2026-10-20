@@ -24,6 +24,28 @@ const updates = {
     statusNote: '2025-02-11 太白县政府/保护区管理局通告:禁止非法穿越秦岭核心保护区和太白山;通行政策以官方最新通告为准',
     permit: { prohibited: true, how: HOW, where: WHERE, source: SOURCE, url: URL, checkedAt: CHECKED_AT },
   },
+  xiate: {
+    status: '禁入',
+    statusNote: '2026-04-08 昭苏县文旅局公告:2026 年昭苏县辖区内所有山区禁止徒步及户外露营,含夏特古道;以官方最新通告为准',
+    permit: {
+      prohibited: true,
+      how: '2026 年昭苏县辖区内所有山区禁止徒步/露营/穿越(含夏特古道)',
+      where: '昭苏县文化体育广播电视和旅游局',
+      source: '新疆昭苏县文旅局 2026-04-08 公告',
+      url: 'https://cbgc.scol.com.cn/news/7477322',
+      checkedAt: CHECKED_AT,
+    },
+  },
+  nianbaoyuze: {
+    permit: {
+      prohibited: true,
+      how: '年保玉则景区 2018 年起关闭;2026-10-04 久治县通告严禁擅自进入未开发未开放区域(含年保玉则核心区)',
+      where: '久治县人民政府/年保玉则景区管理方',
+      source: '新华网:青海久治县关于严禁擅自进入未开发未开放区域探险徒步旅游的通告(2026-10-04)',
+      url: 'http://qh.news.cn/20261004/9decf2dc48c54163bf3a252c7a9e02c3/c.html',
+      checkedAt: CHECKED_AT,
+    },
+  },
 };
 
 const trails = JSON.parse(fs.readFileSync(FILE, 'utf8'));
