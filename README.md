@@ -94,6 +94,8 @@ node scripts/measure-drive-packing.mjs      # 报告:34 个区域在单日驾车
 node scripts/import-gpx.mjs 轨迹.gpx --trail wusun           # 试运行:实测量 vs 标称值对比表
 node scripts/import-gpx.mjs 轨迹.gpx --trail wusun --apply   # 确认后才写 data/trails.json(界面「导入 GPX」等价)
 node scripts/label-backlog.mjs              # 标注欠账:缺 tickets/risks/supplies/bestMonths/regionId/riskNotes/permit
+node scripts/apply-ticket-audit-20261020.mjs # 门票审计:试运行,列出有出处/需改未知的条目
+node scripts/apply-ticket-audit-20261020.mjs --apply # 写回 data/trails.json
 ```
 
 线路接入行程规划需要 `regionId`(34 个环线区域之一)+ `node`(该区域环线上的节点)。
@@ -538,7 +540,7 @@ wannan 4→5、sanxia 3→5。
   同样带来源与核对日期。数据层有断言把关:`ticketSource` 存在就必须有有效数字,而"只有 `ticketNote`
   没有数字"(查过但不敢填)是**合法的**——那正是我们要的诚实状态。欠账清单:`node scripts/label-backlog.mjs tickets`。
 
-**标注口径(自用)**:本应用是单人自用软件,数据标注不必等"社区共识",按公开资料与个人经验整理即可,但两条底线不变——数字与事实不编造,把握不足就留空。`tickets`(参考门票,含常见区间车/管理费)、`risks`、`supplies` 可用 `node scripts/enrich-labels.mjs` 幂等回填(已有值绝不动,管控/禁入线路不自动填票),批量标注后出发前自行核实现价与通行状况;`bestMonths` 可用 `node scripts/enrich-best-months.mjs` 从 bestSeason 原文确定性解析回填(手标为准)。缺标清单:`node scripts/label-backlog.mjs`。
+**标注口径(自用)**:本应用是单人自用软件,数据标注不必等"社区共识",按公开资料与个人经验整理即可,但两条底线不变——数字与事实不编造,把握不足就留空。`tickets`(参考门票,含常见区间车/管理费)、`risks`、`supplies` 可用 `node scripts/enrich-labels.mjs` 幂等回填(已有值绝不动,管控/禁入线路不自动填票),批量标注后出发前自行核实现价与通行状况;`bestMonths` 可用 `node scripts/enrich-best-months.mjs` 从 bestSeason 原文确定性解析回填(手标为准);`bestSeason` 写「全年/四季」的线路本来就没有错季概念,不标 `bestMonths` 不算欠账。缺标清单:`node scripts/label-backlog.mjs`。
 
 **身体状态联动口径**:启动本机 RunOS 后(地址默认 `http://127.0.0.1:8000`,`config.json` 的 `runos.baseUrl` 可改),路线库顶部出现身体状态条(训练状态标签/准备度/耐力·爬坡得分/今日建议档位/数据同步日期),每条路线的卡片带「适合/有挑战/超现阶段」体能徽章和一句可解释理由,规划页选中线路与行程页徒步日同步提示。匹配是确定性纯函数(`lib/fitness.js`):耐力/爬坡得分锚定当前能驾驭的难度上限(封顶 ★4,极限线不给自动放行),负荷过高/训练中断/准备度低迷自动降档,高反提示独立于体能(耐力再好,海拔线照样提醒)。自动选线也吃这个上限:超上限的线路在自动挑选时靠后。数据缺什么就标 unknown,宁缺毋编。
 
